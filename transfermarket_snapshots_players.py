@@ -4,15 +4,15 @@ import os
 import re
 import time
 from datetime import datetime
+import pandas as pd
+import random
 
 import requests
 from bs4 import BeautifulSoup
 
-PLAYERS = [
-    "Cristiano Ronaldo",
-]
-
 OUTPUT_CSV = "transfermarkt_valores.csv"
+MATCHES_CSV = "teste.csv"
+
 SLEEP_ENTRE = 10
 MAX_RETRIES = 3
 
@@ -47,6 +47,24 @@ FIELDNAMES = [
     "market_value_str",
     "club",
 ]
+
+def carregar_jogadores(csv_path):
+    df = pd.read_csv(csv_path)
+
+    jogadores = []
+
+    for players_str in df["home_players"].dropna():
+        lista = players_str.split("|")
+        ultimos_5 = lista[-5:]
+
+        jogadores.extend(ultimos_5)
+
+    # remove duplicados
+    jogadores_unicos = list(dict.fromkeys(jogadores))
+
+    return jogadores_unicos
+
+PLAYERS = carregar_jogadores(MATCHES_CSV)
 
 
 def get_with_retry(url, headers=None, params=None, retries=MAX_RETRIES):
@@ -326,13 +344,13 @@ def main():
                 }
             )
             salvar_registros(todas_linhas)
-            time.sleep(SLEEP_ENTRE)
+            time.sleep(random.uniform(5, 10))
             continue
 
         print(f"        TM ID:  {tm_id}")
         print(f"        TM URL: {tm_url}")
 
-        time.sleep(SLEEP_ENTRE)
+        time.sleep(random.uniform(5, 10))
 
         print(f"    Buscando histórico de valores...", end="  ")
         historico = obter_historico_valores(tm_id)
@@ -376,7 +394,7 @@ def main():
             jogadores_ok += 1
 
         salvar_registros(todas_linhas)
-        time.sleep(SLEEP_ENTRE)
+        time.sleep(random.uniform(5, 10))
 
     dur = datetime.now() - inicio
     print("\n" + "=" * 60)
