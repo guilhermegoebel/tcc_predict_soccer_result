@@ -195,3 +195,19 @@ elo_diff = home_elo - away_elo
 
 Valores positivos indicam vantagem histórica da equipe mandante segundo o sistema Elo.
 
+---
+script.py
+            ↓
+football_matches_ml.csv
+            ↓
+dataset_copa2026.py
+            ↓
+football_matches_ml_worldcup2026.csv
+            ↓
+xgboost_ml.py 
+            ↓
+worldcup_2026_group_stage.csv
+            ↓
+Predição
+            ↓
+worldcup_2026_predictions.csv

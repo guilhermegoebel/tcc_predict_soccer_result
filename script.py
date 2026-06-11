@@ -10,6 +10,8 @@
 # - uso de dicionários O(1)
 # =========================================================
 
+import sys
+
 import pandas as pd
 import numpy as np
 import csv
@@ -175,8 +177,7 @@ market_value['tm_id'] = (
 
 market_value['market_value_str'] = (
     market_value['market_value_str']
-    .astype(str)
-    .str.strip()
+    .apply(parse_market_value)
 )
 
 filtro_remocao = (
@@ -617,21 +618,20 @@ def get_market_value(players, match_date):
     total_value = 0
 
     if not isinstance(players, str):
+
         debug_stats[
             'missing_player_list'
         ] += 1
-
-        """         debug(
-            'MERCADO',
-            'Lista de jogadores ausente'
-        ) """
 
         return 0
 
     players = players.split('|')
 
     jogador_nao_encontrado = 0
+    jogador_sem_valor = 0
     jogadores_utilizados = 0
+
+    match_date = pd.Timestamp(match_date)
 
     for player in reversed(players):
 
@@ -656,34 +656,40 @@ def get_market_value(players, match_date):
             continue
 
         latest_value = None
+        latest_date = None
 
         for m_date, value in player_history:
 
             if pd.isna(m_date):
                 continue
 
-            if m_date <= match_date:
-
-                try:
-                    latest_value = float(value)
-
-                except:
-                    latest_value = None
-
-            else:
+            if m_date > match_date:
                 break
 
+            latest_date = m_date
+            latest_value = value
+
         if latest_value is None:
+
+            jogador_sem_valor += 1
+
+            debug_stats[
+                'market_value_not_found'
+            ] += 1
+
             continue
 
         total_value += latest_value
         jogadores_utilizados += 1
 
-    """ print(
-        f'Jogadores válidos: {jogadores_utilizados}, '
-        f'Não encontrados: {jogador_nao_encontrado}, '
-        f'Valor total: {total_value:.2f}'
-    ) """
+    """
+    print(
+        f'Jogadores válidos={jogadores_utilizados} | '
+        f'Sem histórico={jogador_nao_encontrado} | '
+        f'Sem valor na data={jogador_sem_valor} | '
+        f'Valor total={total_value:,.0f}'
+    )
+    """
 
     return total_value
 
