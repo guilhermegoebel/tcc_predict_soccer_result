@@ -1,0 +1,275 @@
+pais,sigla,sigla_externa
+Afghanistan,AFG,0
+Aland Islands,,1
+Albania,ALB,0
+Alderney,,1
+Algeria,ALG,0
+American Samoa,ASA,0
+Andorra,AND,0
+Angola,ANG,0
+Angola (U-20),ANG,0
+Anguilla,AIA,0
+Antigua and Barbuda,ATG,0
+Argentina,ARG,0
+Armenia,ARM,0
+Aruba,ARU,0
+Australia,AUS,0
+Austria,AUT,0
+Azerbaijan,AZE,0
+Bahamas,BAH,0
+Bahrain,BHR,0
+Bangladesh,BAN,0
+Barbados,BRB,0
+Belarus,BLR,0
+Belgium,BEL,0
+Belize,BLZ,0
+Benin,BEN,0
+Bermuda,BER,0
+Bhutan,BHU,0
+Bolivia,BOL,0
+Bonaire,,1
+Bosnia & Herzegovina,BIH,0
+Botswana,BOT,0
+Brazil,BRA,0
+British Virgin Islands,VGB,0
+Brunei,BRU,0
+Bulgaria,BUL,0
+Burkina Faso,BFA,0
+Burundi,BDI,0
+Cambodia,CAM,0
+Cameroon,CMR,0
+Cameroon (Amateur),CMR,0
+Canada,CAN,0
+Cape Verde,CPV,0
+Cayman Islands,CAY,0
+Central African Republic,CTA,0
+Chad,CHA,0
+Chile,CHI,0
+China,CHN,0
+Colombia,COL,0
+Comoros,COM,0
+Congo,CGO,0
+Cook Islands,COK,0
+Costa Rica,CRC,0
+Croatia,CRO,0
+Cuba,CUB,0
+Cura莽ao,CUW,0
+Cyprus,CYP,0
+Czechia,CZE,0
+Denmark,DEN,0
+Denmark (XI),DEN,0
+Djibouti,DJI,0
+Dominica,DMA,0
+Dominican Republic,DOM,0
+DR Congo,COD,0
+East Timor,TLS,0
+Ecuador,ECU,0
+Egypt,EGY,0
+Egypt (Olympic),EGY,0
+El Salvador,SLV,0
+England,ENG,0
+Equatorial Guinea,EQG,0
+Eritrea,ERI,0
+Estonia,EST,0
+Eswatini,SWZ,0
+Ethiopia,ETH,0
+Falkland Islands,,1
+Faroe Islands,FRO,0
+Fiji,FIJ,0
+Finland,FIN,0
+France,FRA,0
+France (B),FRA,0
+French Guiana,,1
+Fr酶ya,,1
+Gabon,GAB,0
+Gambia,GAM,0
+Georgia,GEO,0
+Germany,GER,0
+Ghana,GHA,0
+Gibraltar,GIB,0
+Gotland,,1
+Gozo,,1
+Greece,GRE,0
+Greenland,,1
+Grenada,GRN,0
+Guadeloupe,,1
+Guam,GUM,0
+Guatemala,GUA,0
+Guernsey,,1
+Guinea,GUI,0
+Guinea (B),GUI,0
+Guinea-Bissau,GNB,0
+Guyana,GUY,0
+Haiti,HAI,0
+Hitra,,1
+home_team,,1
+Honduras,HON,0
+Hong Kong,HKG,0
+Hungary,HUN,0
+Iceland,ISL,0
+India,IND,0
+India (Olympic),IND,0
+Indonesia,IDN,0
+Iran,IRN,0
+Iraq,IRQ,0
+Ireland,IRL,0
+Isle of Man,,1
+Isle of Wight,,1
+Israel,ISR,0
+Italy,ITA,0
+Ivory Coast,CIV,0
+Ivory Coast (local),CIV,0
+Jamaica,JAM,0
+Japan,JPN,0
+Jersey,,1
+Jordan,JOR,0
+Kazakhstan,KAZ,0
+Kenya,KEN,0
+Kiribati,,1
+Kosovo,KOS,0
+Kuwait,KUW,0
+Kyrgyzstan,KGZ,0
+Laos,LAO,0
+Latvia,LVA,0
+Lebanon,LBN,0
+Lesotho,LES,0
+Liberia,LBR,0
+Libya,LBY,0
+Liechtenstein,LIE,0
+Lithuania,LTU,0
+Luxembourg,LUX,0
+Macau,MAC,0
+Madagascar,MAD,0
+Malawi,MWI,0
+Malaysia,MAS,0
+Maldives,MDV,0
+Mali,MLI,0
+Mali (B),MLI,0
+Malta,MLT,0
+Marshall Islands,,1
+Martinique,,1
+Mauritania,MTN,0
+Mauritius,MRI,0
+Mayotte,,1
+Mexico,MEX,0
+Minorca,,1
+Moldova,MDA,0
+Monaco,,1
+Mongolia,MNG,0
+Montenegro,MNE,0
+Montserrat,MSR,0
+Morocco,MAR,0
+Morocco (U23),MAR,0
+Mozambique,MOZ,0
+Myanmar,MYA,0
+Namibia,NAM,0
+Nepal,NEP,0
+Netherlands,NED,0
+Netherlands Antilles,ANT,0
+New Caledonia,NCL,0
+New Zealand,NZL,0
+New Zealand (U-23),NZL,0
+Nicaragua,NCA,0
+Niger,NIG,0
+Nigeria,NGA,0
+North Korea,PRK,0
+North Macedonia,MKD,0
+Northern Cyprus,,1
+Northern Ireland,NIR,0
+Northern Mariana Islands,,1
+Norway,NOR,0
+Oman,OMA,0
+Orkney Islands,,1
+Pakistan,PAK,0
+Palestine,PLE,0
+Panama,PAN,0
+Papua New Guinea,PNG,0
+Papua New Guinea (B),PNG,0
+Paraguay,PAR,0
+Peru,PER,0
+Philippines,PHI,0
+Poland,POL,0
+Portugal,POR,0
+Puerto Rico,PUR,0
+Qatar,QAT,0
+R茅union,,1
+Rhodes,,1
+Romania,ROU,0
+Russia,RUS,0
+Rwanda,RWA,0
+Rwanda (B),RWA,0
+Saaremaa,,1
+Saint Helena,,1
+Saint Kitts & Nevis,SKN,0
+Saint Lucia,LCA,0
+Saint Martin,,1
+Saint Pierre & Miquelon,,1
+Saint Vincent & Grenadines,VIN,0
+Samoa,SAM,0
+San Marino,SMR,0
+Sao Tome and Principe,STP,0
+Sark,,1
+Saudi Arabia,KSA,0
+Scotland,SCO,0
+Senegal,SEN,0
+Senegal (U-23),SEN,0
+Serbia,SRB,0
+Serbia & Montenegro,SCG,0
+Seychelles,SEY,0
+Shetland Islands,,1
+Sierra Leone,SLE,0
+Singapore,SGP,0
+Sint Maarten,,1
+Slovakia,SVK,0
+Slovenia,SVN,0
+Solomon Islands,SOL,0
+Solomon Islands (B),SOL,0
+Somalia,SOM,0
+South Africa,RSA,0
+South Korea,KOR,0
+South Sudan,SSD,0
+Spain,ESP,0
+Sri Lanka,SRI,0
+Sudan,SDN,0
+Suriname,SUR,0
+Sweden,SWE,0
+Switzerland,SUI,0
+Syria,SYR,0
+Tahiti,TAH,0
+Taiwan,TPE,0
+Tajikistan,TJK,0
+Tanzania,TAN,0
+Thailand,THA,0
+Tibet,,1
+Togo,TOG,0
+Tonga,TGA,0
+Trinidad & Tobago,TRI,0
+Tunisia,TUN,0
+Turkey,TUR,0
+Turkmenistan,TKM,0
+Turks & Caicos Islands,TCA,0
+Tuvalu,,1
+Uganda,UGA,0
+Uganda (B),UGA,0
+Ukraine,UKR,0
+United Arab Emirates,UAE,0
+United Arab Emirates (Olympic),UAE,0
+Uruguay,URU,0
+US Virgin Islands,VIR,0
+USA,USA,0
+Uzbekistan,UZB,0
+Vanuatu,VAN,0
+Vanuatu (B),VAN,0
+Vatican City,,1
+Venezuela,VEN,0
+Vietnam,VIE,0
+Wales,WAL,0
+Western Isles,,1
+Yemen,YEM,0
+Ynys M么n,,1
+Yugoslavia,YUG,0
+Zambia,ZAM,0
+Zanzibar,,1
+Zimbabwe,ZIM,0
+Federated States of Micronesia,,1
+Sudan (Olympic),SDN,0

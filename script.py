@@ -14,6 +14,7 @@ import pandas as pd
 import numpy as np
 import csv
 import time
+from bisect import bisect_right
 from collections import defaultdict, deque
 
 # =========================================================
@@ -31,6 +32,49 @@ LAST_MATCHES_FORM = 5
 INITIAL_ELO = 1500
 
 ELO_K = 20
+
+DEBUG = True
+
+debug_stats = {
+    'invalid_match_dates': 0,
+    'invalid_ranking_dates': 0,
+    'invalid_market_dates': 0,
+    'invalid_scores': 0,
+    'ranking_not_found': 0,
+    'ranking_before_date_not_found': 0,
+    'market_player_not_found': 0,
+    'market_value_not_found': 0,
+    'missing_player_list': 0,
+    'unmapped_fifa_codes': 0
+}
+
+def debug(level, message):
+    if DEBUG:
+        print(f'[{level}] {message}')
+
+def parse_market_value(value):
+
+    if pd.isna(value):
+        return np.nan
+
+    value = str(value).strip().lower()
+
+    value = value.replace('€', '')
+
+    multiplier = 1
+
+    if value.endswith('m'):
+        multiplier = 1_000_000
+        value = value[:-1]
+
+    elif value.endswith('k'):
+        multiplier = 1_000
+        value = value[:-1]
+
+    try:
+        return float(value) * multiplier
+    except:
+        return np.nan
 
 # =========================================================
 # TIMER GLOBAL
@@ -50,7 +94,7 @@ matches = pd.read_csv(
     engine='python',
     encoding='utf-8',
     quoting=csv.QUOTE_MINIMAL,
-    on_bad_lines='skip', #rever se isso faz sentido, quais dados estamos perdendo aqui?
+    #on_bad_lines='skip', #rever se isso faz sentido, quais dados estamos perdendo aqui?
     usecols=[
         'match_id',
         'date',
@@ -61,6 +105,34 @@ matches = pd.read_csv(
         'home_players',
         'away_players'
     ]
+)
+
+# Normaliza a coluna para evitar problemas com espaços
+matches['score'] = (
+    matches['score']
+    .astype(str)
+    .str.strip()
+)
+
+filtro_remocao = (
+    (matches['score'] == 'canc. Status: Cancelled')
+    |
+    (matches['score'].isna())
+)
+
+removidos_matches = filtro_remocao.sum()
+
+# Mantém apenas os registros válidos
+matches = matches[
+    ~filtro_remocao
+].copy()
+
+print(
+    f'  Registros de partidas removidos na limpeza: {removidos_matches:,}'
+)
+
+print(
+    f'  Registros restantes de partidas: {len(matches):,}'
 )
 
 rankings = pd.read_csv(
@@ -87,13 +159,52 @@ market_value = pd.read_csv(
     quoting=csv.QUOTE_MINIMAL,
     on_bad_lines='skip',
     usecols=[
+        'tm_id',
         'player_search_name',
         'date',
-        'market_value_eur'
+        'market_value_str'
     ]
 )
 
-print('Datasets carregados.')
+# Normaliza a coluna para evitar problemas com espaços
+market_value['tm_id'] = (
+    market_value['tm_id']
+    .astype(str)
+    .str.strip()
+)
+
+market_value['market_value_str'] = (
+    market_value['market_value_str']
+    .astype(str)
+    .str.strip()
+)
+
+filtro_remocao = (
+    (market_value['tm_id'] == 'NAO_ENCONTRADO')
+    |
+    (market_value['market_value_str'] == '-')
+    |
+    (market_value['market_value_str'] == 'sem dados')
+    |
+    (market_value['market_value_str'].isna())
+)
+
+removidos = filtro_remocao.sum()
+
+# Mantém apenas os registros válidos
+market_value = market_value[
+    ~filtro_remocao
+].copy()
+
+print(
+    f'  Registros de mercado removidos na limpeza: {removidos:,}'
+)
+
+print(
+    f'  Registros restantes do mercado: {len(market_value):,}'
+)
+
+print('Datasets carregados. ============================')
 
 # =========================================================
 # CONVERTER TIPOS NUMÉRICOS
@@ -109,9 +220,9 @@ rankings['points'] = pd.to_numeric(
     errors='coerce'
 )
 
-market_value['market_value_eur'] = pd.to_numeric(
-    market_value['market_value_eur'],
-    errors='coerce'
+market_value['market_value_str'] = (
+    market_value['market_value_str']
+    .apply(parse_market_value)
 )
 
 # =========================================================
@@ -138,6 +249,71 @@ market_value['market_date'] = pd.to_datetime(
     errors='coerce'
 )
 
+invalid_matches_dates = matches['date'].isna().sum()
+invalid_dates = matches[
+    matches['date'].isna()
+]
+
+""" print("\n=== PARTIDAS COM DATA INVÁLIDA ===")
+print(invalid_dates[['match_id', 'date']]) """
+
+if invalid_matches_dates:
+
+    debug_stats['invalid_match_dates'] = invalid_matches_dates
+
+    debug(
+        'ERRO',
+        f'{invalid_matches_dates} partidas possuem datas inválidas'
+    )
+
+invalid_ranking_dates = rankings[
+    'ranking_date'
+].isna().sum()
+
+if invalid_ranking_dates:
+
+    debug_stats['invalid_ranking_dates'] = invalid_ranking_dates
+
+    debug(
+        'ERRO',
+        f'{invalid_ranking_dates} rankings possuem datas inválidas'
+    )
+
+""" 
+invalid_rankings = rankings[
+    rankings['ranking_date'].isna()
+]
+
+print("\n=== RANKINGS COM DATA INVÁLIDA ===")
+print(
+    invalid_rankings[
+        ['year', 'date_label', 'team']
+    ]
+) """
+
+missing_market_dates = market_value[
+    'market_date'
+].isna().sum()
+
+if missing_market_dates:
+
+    debug(
+        'INFO',
+        f'{missing_market_dates} jogadores sem histórico de valor de mercado'
+    )
+
+invalid_market = market_value[
+    market_value['market_date'].isna()
+]
+
+""" print("\n=== EXEMPLOS MARKET VALUE ===")
+
+print(
+    invalid_market[
+        ['player_search_name', 'date']
+    ].head(20)
+) """
+
 # =========================================================
 # 3. EXTRAÇÃO GOLS
 # =========================================================
@@ -156,6 +332,20 @@ matches['away_goals'] = pd.to_numeric(
     errors='coerce'
 )
 
+""" 
+invalid_scores = (
+    matches['home_goals'].isna() | matches['away_goals'].isna()
+)
+
+print("\n=== SCORES INVÁLIDOS ===")
+
+print(
+    matches.loc[
+        invalid_scores,
+        ['match_id', 'date', 'home_team', 'away_team', 'score']
+    ]
+) """
+
 # =========================================================
 # 4. MODO TESTE
 # =========================================================
@@ -165,71 +355,86 @@ if TEST_MODE:
     matches = matches.iloc[
         [TEST_MATCH_INDEX]
     ].copy()
-
 # =========================================================
 # 5. NORMALIZAÇÃO FIFA
 # =========================================================
 
+from collections import defaultdict
+
 print('Normalizando nomes FIFA...')
 
-fifa_country_map = {
+# Ex:
+# FRA -> {"France", "France (B)"}
+# POR -> {"Portugal"}
+fifa_aliases = defaultdict(set)
 
-    'BRA': 'Brazil',
-    'ARG': 'Argentina',
-    'FRA': 'France',
-    'GER': 'Germany',
-    'ESP': 'Spain',
-    'POR': 'Portugal',
-    'ENG': 'England',
-    'ITA': 'Italy',
-    'NED': 'Netherlands',
-    'BEL': 'Belgium',
-    'CRO': 'Croatia',
-    'URU': 'Uruguay',
-    'USA': 'United States',
-    'MEX': 'Mexico',
-    'JPN': 'Japan',
-    'KOR': 'South Korea',
-    'MAR': 'Morocco',
-    'SUI': 'Switzerland',
-    'DEN': 'Denmark',
-    'SEN': 'Senegal',
-    'POL': 'Poland',
-    'SRB': 'Serbia',
-    'CMR': 'Cameroon',
-    'CAN': 'Canada',
-    'AUS': 'Australia',
-    'CRC': 'Costa Rica',
-    'QAT': 'Qatar',
-    'GHA': 'Ghana',
-    'TUN': 'Tunisia',
-    'IRN': 'Iran',
-    'KSA': 'Saudi Arabia',
-    'ECU': 'Ecuador',
-    'WAL': 'Wales'
-}
+with open(
+    "paises_siglas_relacao.csv",
+    "r",
+    encoding="utf-8"
+) as f:
 
+    reader = csv.DictReader(f)
+
+    for row in reader:
+
+        sigla = row["sigla"].strip()
+        pais = row["pais"].strip()
+
+        if sigla and pais:
+
+            fifa_aliases[sigla].add(
+                pais
+            )
+
+# DEBUG
+print(
+    f'FRA -> {fifa_aliases.get("FRA", set())}'
+)
+
+# Mantém um nome principal para compatibilidade
 rankings['team_name'] = rankings[
     'team'
-].map(fifa_country_map)
+].apply(
+    lambda x: (
+        sorted(fifa_aliases[x])[0]
+        if x in fifa_aliases
+        else x
+    )
+)
 
-rankings['team_name'] = rankings[
-    'team_name'
-].fillna(rankings['team'])
+unmapped = rankings[
+    ~rankings['team'].isin(
+        fifa_aliases.keys()
+    )
+]['team'].unique()
 
+if len(unmapped):
+
+    debug_stats[
+        'unmapped_fifa_codes'
+    ] = len(unmapped)
+
+    debug(
+        'ERRO',
+        f'{len(unmapped)} siglas FIFA não encontradas'
+    )
+
+    debug(
+        'INFO',
+        f'Primeiras siglas sem mapeamento: {list(unmapped[:20])}'
+    )
 # =========================================================
 # 6. OTIMIZAÇÃO TIPOS
 # =========================================================
 
 categorical_columns = [
-
     'home_team',
     'away_team',
     'competition'
 ]
 
 for col in categorical_columns:
-
     matches[col] = matches[col].astype(
         'category'
     )
@@ -248,15 +453,25 @@ ranking_cache = defaultdict(list)
 
 for _, row in rankings.iterrows():
 
-    ranking_cache[
-        row['team_name']
-    ].append(
-        (
-            row['ranking_date'],
-            row['rank'],
-            row['points']
-        )
+    sigla = row['team']
+
+    aliases = fifa_aliases.get(
+        sigla,
+        {sigla}
     )
+
+    for alias in aliases:
+
+        ranking_cache[
+            alias
+        ].append(
+            (
+                row['ranking_date'],
+                row['rank'],
+                row['points']
+            )
+        )
+
 
 # =========================================================
 # 8. CACHE MARKET VALUE
@@ -287,7 +502,7 @@ for player, group in market_value.groupby(
 
         zip(
             group['market_date'],
-            group['market_value_eur']
+            group['market_value_str']
         )
     )
 
@@ -316,35 +531,112 @@ def get_latest_ranking(team, match_date):
         []
     )
 
-    latest_rank = np.nan
-    latest_points = np.nan
+    if not rankings_list:
 
-    for r_date, rank, points in rankings_list:
+        debug_stats[
+            'ranking_not_found'
+        ] += 1
 
-        if r_date <= match_date:
+        debug(
+            'RANKING',
+            f'Nenhum ranking encontrado para "{team}"'
+        )
 
-            latest_rank = rank
-            latest_points = points
+        # DEBUG EXTRA
+        similares = [
+            t for t in ranking_cache.keys()
+            if team.lower() in str(t).lower()
+            or str(t).lower() in team.lower()
+        ][:20]
 
-        else:
-            break
+        """        debug(
+                    'RANKING',
+                    f'Times parecidos encontrados: {similares}'
+                )
+        """
+        return np.nan, np.nan
+
+    dates = [
+        r_date
+        for r_date, _, _ in rankings_list
+        if pd.notna(r_date)
+    ]
+
+    if not dates:
+
+        debug(
+            'RANKING',
+            f'{team} possui registros mas todas as datas são inválidas'
+        )
+
+        debug(
+            'RANKING',
+            f'Primeiros registros: {rankings_list[:5]}'
+        )
+
+        return np.nan, np.nan
+
+    match_date = pd.Timestamp(match_date)
+
+    pos = bisect_right(
+        dates,
+        match_date
+    ) - 1
+
+    if pos < 0:
+
+        debug_stats[
+            'ranking_before_date_not_found'
+        ] += 1
+
+        debug(
+            'RANKING',
+            f'{team} não possui ranking antes de {match_date}'
+        )
+
+        debug(
+            'RANKING',
+            f'Primeira data disponível: {dates[0]}'
+        )
+
+        debug(
+            'RANKING',
+            f'Última data disponível: {dates[-1]}'
+        )
+
+        return np.nan, np.nan
+
+    selected_date, latest_rank, latest_points = (
+        rankings_list[pos]
+    )
 
     return latest_rank, latest_points
-
-# =========================================================
 
 def get_market_value(players, match_date):
 
     total_value = 0
 
     if not isinstance(players, str):
+        debug_stats[
+            'missing_player_list'
+        ] += 1
+
+        """         debug(
+            'MERCADO',
+            'Lista de jogadores ausente'
+        ) """
+
         return 0
 
-    players = players.split('|')[
-        -MAX_PLAYERS_PER_TEAM:
-    ]
+    players = players.split('|')
 
-    for player in players:
+    jogador_nao_encontrado = 0
+    jogadores_utilizados = 0
+
+    for player in reversed(players):
+
+        if jogadores_utilizados >= MAX_PLAYERS_PER_TEAM:
+            break
 
         player = player.lower().strip()
 
@@ -353,7 +645,17 @@ def get_market_value(players, match_date):
             []
         )
 
-        latest_value = 0
+        if not player_history:
+
+            debug_stats[
+                'market_player_not_found'
+            ] += 1
+
+            jogador_nao_encontrado += 1
+
+            continue
+
+        latest_value = None
 
         for m_date, value in player_history:
 
@@ -364,17 +666,26 @@ def get_market_value(players, match_date):
 
                 try:
                     latest_value = float(value)
+
                 except:
-                    latest_value = 0
+                    latest_value = None
 
             else:
                 break
 
+        if latest_value is None:
+            continue
+
         total_value += latest_value
+        jogadores_utilizados += 1
+
+    """ print(
+        f'Jogadores válidos: {jogadores_utilizados}, '
+        f'Não encontrados: {jogador_nao_encontrado}, '
+        f'Valor total: {total_value:.2f}'
+    ) """
 
     return total_value
-
-# =========================================================
 
 def calculate_recent_form(team):
 
@@ -453,6 +764,11 @@ for idx, row in matches.iterrows():
     # RANKINGS
     # =====================================================
 
+    """     print(f'Processando partida: {home_team} vs {away_team}'
+          f' em {match_date.date()}',
+          f'\n Jogadores: {row["home_players"]}'
+    ) """
+
     home_rank, home_points = (
         get_latest_ranking(
             home_team,
@@ -470,7 +786,7 @@ for idx, row in matches.iterrows():
     # =====================================================
     # MARKET VALUE
     # =====================================================
-
+    
     home_market = get_market_value(
         row['home_players'],
         match_date
@@ -799,6 +1115,44 @@ df = pd.DataFrame(
 # =========================================================
 # 14. SALVAR
 # =========================================================
+
+print('\n===================================')
+print('DIAGNÓSTICO DE QUALIDADE')
+print('===================================')
+
+for key, value in debug_stats.items():
+
+    print(
+        f'{key}: {value:,}'
+    )
+
+print('\nValores ausentes no dataset final')
+
+print(
+    f'home_rank: {df["home_rank"].isna().sum():,}'
+)
+
+print(
+    f'away_rank: {df["away_rank"].isna().sum():,}'
+)
+
+print(
+    f'home_points: {df["home_points"].isna().sum():,}'
+)
+
+print(
+    f'away_points: {df["away_points"].isna().sum():,}'
+)
+
+print(
+    f'home_market_value = 0: '
+    f'{(df["home_market_value"] == 0).sum():,}'
+)
+
+print(
+    f'away_market_value = 0: '
+    f'{(df["away_market_value"] == 0).sum():,}'
+)
 
 output_file = 'football_matches_ml.csv'
 
