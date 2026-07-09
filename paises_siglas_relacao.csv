@@ -1,6 +1,6 @@
 pais,sigla,sigla_externa
 Afghanistan,AFG,0
-Aland Islands,,1
+Aland Islands,ALA,1
 Albania,ALB,0
 Alderney,,1
 Algeria,ALG,0
@@ -27,7 +27,7 @@ Benin,BEN,0
 Bermuda,BER,0
 Bhutan,BHU,0
 Bolivia,BOL,0
-Bonaire,,1
+Bonaire,BES,1
 Bosnia & Herzegovina,BIH,0
 Botswana,BOT,0
 Brazil,BRA,0
@@ -53,7 +53,7 @@ Cook Islands,COK,0
 Costa Rica,CRC,0
 Croatia,CRO,0
 Cuba,CUB,0
-Cura莽ao,CUW,0
+Curaçao,CUW,0
 Cyprus,CYP,0
 Czechia,CZE,0
 Denmark,DEN,0
@@ -73,14 +73,14 @@ Eritrea,ERI,0
 Estonia,EST,0
 Eswatini,SWZ,0
 Ethiopia,ETH,0
-Falkland Islands,,1
+Falkland Islands,FLK,1
 Faroe Islands,FRO,0
 Fiji,FIJ,0
 Finland,FIN,0
 France,FRA,0
 France (B),FRA,0
-French Guiana,,1
-Fr酶ya,,1
+French Guiana,GUF,1
+Froya,,1
 Gabon,GAB,0
 Gambia,GAM,0
 Georgia,GEO,0
@@ -90,19 +90,18 @@ Gibraltar,GIB,0
 Gotland,,1
 Gozo,,1
 Greece,GRE,0
-Greenland,,1
+Greenland,GRL,1
 Grenada,GRN,0
-Guadeloupe,,1
+Guadeloupe,GLP,1
 Guam,GUM,0
 Guatemala,GUA,0
-Guernsey,,1
+Guernsey,GGY,1
 Guinea,GUI,0
 Guinea (B),GUI,0
 Guinea-Bissau,GNB,0
 Guyana,GUY,0
 Haiti,HAI,0
 Hitra,,1
-home_team,,1
 Honduras,HON,0
 Hong Kong,HKG,0
 Hungary,HUN,0
@@ -113,7 +112,7 @@ Indonesia,IDN,0
 Iran,IRN,0
 Iraq,IRQ,0
 Ireland,IRL,0
-Isle of Man,,1
+Isle of Man,IMN,1
 Isle of Wight,,1
 Israel,ISR,0
 Italy,ITA,0
@@ -121,7 +120,7 @@ Ivory Coast,CIV,0
 Ivory Coast (local),CIV,0
 Jamaica,JAM,0
 Japan,JPN,0
-Jersey,,1
+Jersey,JEY,1
 Jordan,JOR,0
 Kazakhstan,KAZ,0
 Kenya,KEN,0
@@ -154,7 +153,7 @@ Mayotte,,1
 Mexico,MEX,0
 Minorca,,1
 Moldova,MDA,0
-Monaco,,1
+Monaco,MCO,1
 Mongolia,MNG,0
 Montenegro,MNE,0
 Montserrat,MSR,0
@@ -192,7 +191,7 @@ Poland,POL,0
 Portugal,POR,0
 Puerto Rico,PUR,0
 Qatar,QAT,0
-R茅union,,1
+Reunion,,1
 Rhodes,,1
 Romania,ROU,0
 Russia,RUS,0
@@ -248,7 +247,7 @@ Tunisia,TUN,0
 Turkey,TUR,0
 Turkmenistan,TKM,0
 Turks & Caicos Islands,TCA,0
-Tuvalu,,1
+Tuvalu,TUV,1
 Uganda,UGA,0
 Uganda (B),UGA,0
 Ukraine,UKR,0
@@ -266,10 +265,13 @@ Vietnam,VIE,0
 Wales,WAL,0
 Western Isles,,1
 Yemen,YEM,0
-Ynys M么n,,1
+Ynys Môn,,1
 Yugoslavia,YUG,0
 Zambia,ZAM,0
 Zanzibar,,1
 Zimbabwe,ZIM,0
 Federated States of Micronesia,,1
 Sudan (Olympic),SDN,0
+Libya,LIB,0
+Czechoslovakia,TCH,1
+Zaire,ZAI,1

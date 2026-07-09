@@ -196,6 +196,8 @@ elo_diff = home_elo - away_elo
 Valores positivos indicam vantagem histórica da equipe mandante segundo o sistema Elo.
 
 ---
+FILES: rankings_fifa + matches + valor_mercado_jogadores + paises_siglas_relacao
+            ↓
 script.py
             ↓
 football_matches_ml.csv
