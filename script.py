@@ -10,10 +10,14 @@
 # - uso de dicionários O(1)
 # =========================================================
 
+import sys
+
 import pandas as pd
 import numpy as np
 import csv
 import time
+import unicodedata
+import statistics
 from bisect import bisect_right
 from collections import defaultdict, deque
 
@@ -23,7 +27,19 @@ from collections import defaultdict, deque
 
 TEST_MODE = False
 
+# Quantidade de partidas processadas quando TEST_MODE = True.
+# Se quiser processar só 1 partida específica, use TEST_MATCH_INDEX
+# e defina TEST_N_MATCHES = 1.
+TEST_N_MATCHES = 10
+
 TEST_MATCH_INDEX = 0
+
+# Quando True, imprime no console a comparação de nomes de jogadores:
+# nome original (do CSV de partidas) -> nome normalizado -> se foi
+# encontrado no cache de valores de mercado -> valor utilizado.
+# É automaticamente ativado quando TEST_MODE = True (ver abaixo),
+# mas pode ser forçado manualmente aqui também.
+SHOW_PLAYER_MATCHING = False
 
 MAX_PLAYERS_PER_TEAM = 5
 
@@ -31,7 +47,31 @@ LAST_MATCHES_FORM = 5
 
 INITIAL_ELO = 1500
 
+# K base, usado apenas quando ENABLE_COMPETITION_WEIGHT = False
 ELO_K = 20
+
+# Se True, o peso (K) de cada partida varia conforme a importância da
+# competição (amistoso pesa menos, fase final de grande torneio pesa
+# mais), em vez de usar sempre o mesmo ELO_K fixo.
+ENABLE_COMPETITION_WEIGHT = True
+
+# Se True, aplica o multiplicador clássico de margem de vitória
+# (diferença de gols) na atualização do Elo: vencer por vários gols
+# de diferença altera o rating mais do que vencer por 1 gol.
+ENABLE_GOAL_DIFF_MULTIPLIER = True
+
+# Se True, soma HOME_ADVANTAGE ao rating do mandante apenas para
+# calcular o resultado esperado (não altera o rating "bruto" salvo
+# como feature). Sem isso, o Elo tende a confundir vantagem de jogar
+# em casa com força real do time.
+ENABLE_HOME_ADVANTAGE = True
+HOME_ADVANTAGE = 100
+
+# Se True, no início de cada novo ano regride uma fração do rating de
+# cada time de volta para o INITIAL_ELO, refletindo a maior incerteza
+# sobre times que ficaram muito tempo sem jogar.
+ENABLE_ANNUAL_REGRESSION = True
+ANNUAL_REGRESSION_FACTOR = 0.30
 
 DEBUG = True
 
@@ -44,6 +84,8 @@ debug_stats = {
     'ranking_before_date_not_found': 0,
     'market_player_not_found': 0,
     'market_value_not_found': 0,
+    'market_value_fallback_nearest': 0,
+    'market_incomplete_5_players': 0,
     'missing_player_list': 0,
     'unmapped_fifa_codes': 0
 }
@@ -57,24 +99,63 @@ def parse_market_value(value):
     if pd.isna(value):
         return np.nan
 
-    value = str(value).strip().lower()
+    text = str(value).strip()
 
-    value = value.replace('€', '')
+    if not text:
+        return np.nan
+
+    text = text.replace('€', '')
+    text = text.replace('$', '')
+    text = text.replace(' ', '')
+
+    text = text.lower()
+
+    if text in {'', '-', 'nan', 'none', 'na', 'semdados', 'sem dados'}:
+        return np.nan
 
     multiplier = 1
 
-    if value.endswith('m'):
+    if text.endswith('m'):
         multiplier = 1_000_000
-        value = value[:-1]
+        text = text[:-1]
 
-    elif value.endswith('k'):
+    elif text.endswith('k'):
         multiplier = 1_000
-        value = value[:-1]
+        text = text[:-1]
+
+    if ',' in text and '.' in text:
+        text = text.replace('.', '').replace(',', '.')
+    elif ',' in text:
+        text = text.replace(',', '.')
 
     try:
-        return float(value) * multiplier
-    except:
+        return float(text) * multiplier
+    except Exception:
         return np.nan
+
+
+def normalize_player_name(player):
+
+    if pd.isna(player):
+        return ''
+
+    text = str(player).strip().lower()
+
+    # Remove acentuação/diacríticos (é -> e, ñ -> n, ã -> a, ô -> o, etc.)
+    # tanto para o nome que está sendo buscado quanto para os nomes
+    # armazenados no cache de valores de mercado.
+    text = unicodedata.normalize('NFKD', text)
+    text = ''.join(
+        ch for ch in text
+        if not unicodedata.combining(ch)
+    )
+
+    text = text.replace('.', '')
+    text = text.replace('-', '')
+    text = text.replace("'", '')
+    text = text.replace(' ', '')
+
+    return text
 
 # =========================================================
 # TIMER GLOBAL
@@ -161,6 +242,7 @@ market_value = pd.read_csv(
     usecols=[
         'tm_id',
         'player_search_name',
+        'tm_name',
         'date',
         'market_value_str'
     ]
@@ -173,20 +255,13 @@ market_value['tm_id'] = (
     .str.strip()
 )
 
-market_value['market_value_str'] = (
+market_value['market_value_num'] = (
     market_value['market_value_str']
-    .astype(str)
-    .str.strip()
+    .apply(parse_market_value)
 )
 
 filtro_remocao = (
     (market_value['tm_id'] == 'NAO_ENCONTRADO')
-    |
-    (market_value['market_value_str'] == '-')
-    |
-    (market_value['market_value_str'] == 'sem dados')
-    |
-    (market_value['market_value_str'].isna())
 )
 
 removidos = filtro_remocao.sum()
@@ -218,11 +293,6 @@ rankings['rank'] = pd.to_numeric(
 rankings['points'] = pd.to_numeric(
     rankings['points'],
     errors='coerce'
-)
-
-market_value['market_value_str'] = (
-    market_value['market_value_str']
-    .apply(parse_market_value)
 )
 
 # =========================================================
@@ -352,9 +422,23 @@ print(
 
 if TEST_MODE:
 
-    matches = matches.iloc[
-        [TEST_MATCH_INDEX]
-    ].copy()
+    matches = (
+        matches
+        .sort_values('date')
+        .iloc[TEST_MATCH_INDEX:TEST_MATCH_INDEX + TEST_N_MATCHES]
+        .copy()
+    )
+
+    # Em modo teste, liga automaticamente a exibição da comparação
+    # de nomes de jogadores (pode ser desligada manualmente na
+    # seção de configurações se não for necessária).
+    SHOW_PLAYER_MATCHING = True
+
+    debug(
+        'TESTE',
+        f'Modo teste ativo: processando {len(matches)} partida(s) '
+        f'a partir do índice {TEST_MATCH_INDEX}'
+    )
 # =========================================================
 # 5. NORMALIZAÇÃO FIFA
 # =========================================================
@@ -479,31 +563,48 @@ for _, row in rankings.iterrows():
 
 print('Criando cache valores mercado...')
 
-market_value[
-    'player_norm'
-] = (
-    market_value['player_search_name']
-    .astype(str)
-    .str.lower()
-    .str.strip()
-)
+market_value['player_norm'] = market_value[
+    'player_search_name'
+].apply(normalize_player_name)
+
+market_value['tm_name_norm'] = market_value[
+    'tm_name'
+].apply(normalize_player_name)
 
 market_value = market_value.sort_values(
     'market_date'
 )
 
-market_cache = {}
+market_cache = defaultdict(list)
 
-for player, group in market_value.groupby(
-    'player_norm'
-):
+for _, row in market_value.iterrows():
 
-    market_cache[player] = list(
+    player_names = [
+        name for name in [
+            row['player_norm'],
+            row['tm_name_norm']
+        ] if name
+    ]
 
-        zip(
-            group['market_date'],
-            group['market_value_str']
+    if not player_names:
+        continue
+
+    value = row['market_value_num']
+
+    if pd.isna(value):
+        continue
+
+    for player_name in set(player_names):
+        market_cache[player_name].append(
+            (
+                row['market_date'],
+                value
+            )
         )
+
+for player_name in market_cache:
+    market_cache[player_name].sort(
+        key=lambda item: item[0]
     )
 
 # =========================================================
@@ -537,10 +638,10 @@ def get_latest_ranking(team, match_date):
             'ranking_not_found'
         ] += 1
 
-        debug(
+        """ debug(
             'RANKING',
             f'Nenhum ranking encontrado para "{team}"'
-        )
+        ) """
 
         # DEBUG EXTRA
         similares = [
@@ -589,20 +690,20 @@ def get_latest_ranking(team, match_date):
             'ranking_before_date_not_found'
         ] += 1
 
-        debug(
+        """ debug(
             'RANKING',
             f'{team} não possui ranking antes de {match_date}'
-        )
+        ) """
 
-        debug(
+        """ debug(
             'RANKING',
             f'Primeira data disponível: {dates[0]}'
-        )
+        ) """
 
-        debug(
+        """ debug(
             'RANKING',
             f'Última data disponível: {dates[-1]}'
-        )
+        ) """
 
         return np.nan, np.nan
 
@@ -612,36 +713,98 @@ def get_latest_ranking(team, match_date):
 
     return latest_rank, latest_points
 
-def get_market_value(players, match_date):
+def pick_market_value(player_history, match_date):
+    """
+    player_history: lista de tuplas (data, valor) ordenada por data
+    crescente para um jogador.
 
-    total_value = 0
+    Retorna (valor, data_usada, é_anterior_ou_igual):
+    - Preferência: o valor mais recente com data <= match_date.
+    - Caso não exista nenhum valor anterior/igual à data da partida,
+      usa o valor mais próximo disponível (o primeiro registro
+      seguinte cronologicamente, já que a lista está ordenada).
+    """
+
+    best_before = None
+    best_after = None
+
+    for m_date, value in player_history:
+
+        if pd.isna(m_date):
+            continue
+
+        if m_date <= match_date:
+            best_before = (m_date, value)
+
+        else:
+            best_after = (m_date, value)
+            break
+
+    if best_before is not None:
+        return best_before[1], best_before[0], True
+
+    if best_after is not None:
+        return best_after[1], best_after[0], False
+
+    return None, None, False
+
+
+def get_market_value(players, match_date, team_label=None):
 
     if not isinstance(players, str):
+
         debug_stats[
             'missing_player_list'
         ] += 1
 
-        """         debug(
-            'MERCADO',
-            'Lista de jogadores ausente'
-        ) """
+        return 0.0, 0
 
-        return 0
+    player_list = [
+        player for player in players.split('|')
+        if str(player).strip()
+    ]
 
-    players = players.split('|')
+    if not player_list:
+        return 0.0, 0
 
-    jogador_nao_encontrado = 0
-    jogadores_utilizados = 0
+    match_date = pd.Timestamp(match_date)
 
-    for player in reversed(players):
+    # Ordem de tentativa: primeiro os últimos MAX_PLAYERS_PER_TEAM
+    # jogadores da lista. Se não completarem 5 valores encontrados,
+    # busca no restante do elenco daquela partida (do mais próximo do
+    # final para o início), até encontrar 5 jogadores com valor ou
+    # esgotar a lista de jogadores da partida.
+    last_n = player_list[-MAX_PLAYERS_PER_TEAM:]
+    remaining = list(
+        reversed(
+            player_list[:-MAX_PLAYERS_PER_TEAM]
+        )
+    )
 
-        if jogadores_utilizados >= MAX_PLAYERS_PER_TEAM:
+    ordered_candidates = last_n + remaining
+
+    total_value = 0.0
+    found_count = 0
+
+    if SHOW_PLAYER_MATCHING:
+
+        print(
+            f'\n--- Comparação de nomes de jogadores '
+            f'({team_label or "?"} | partida em {match_date.date()}) ---'
+        )
+
+    for player in ordered_candidates:
+
+        if found_count >= MAX_PLAYERS_PER_TEAM:
             break
 
-        player = player.lower().strip()
+        player_key = normalize_player_name(player)
+
+        if not player_key:
+            continue
 
         player_history = market_cache.get(
-            player,
+            player_key,
             []
         )
 
@@ -651,80 +814,93 @@ def get_market_value(players, match_date):
                 'market_player_not_found'
             ] += 1
 
-            jogador_nao_encontrado += 1
+            if SHOW_PLAYER_MATCHING:
+
+                print(
+                    f'  "{player}" -> "{player_key}" '
+                    f'=> NÃO ENCONTRADO no cache '
+                    f'(buscando próximo jogador do elenco)'
+                )
 
             continue
 
-        latest_value = None
+        value, used_date, is_before_or_equal = pick_market_value(
+            player_history,
+            match_date
+        )
 
-        for m_date, value in player_history:
+        if value is None:
 
-            if pd.isna(m_date):
-                continue
+            # Não deveria ocorrer já que player_history não está vazio,
+            # mas mantemos por segurança.
+            debug_stats[
+                'market_value_not_found'
+            ] += 1
 
-            if m_date <= match_date:
-
-                try:
-                    latest_value = float(value)
-
-                except:
-                    latest_value = None
-
-            else:
-                break
-
-        if latest_value is None:
             continue
 
-        total_value += latest_value
-        jogadores_utilizados += 1
+        if not is_before_or_equal:
 
-    """ print(
-        f'Jogadores válidos: {jogadores_utilizados}, '
-        f'Não encontrados: {jogador_nao_encontrado}, '
-        f'Valor total: {total_value:.2f}'
-    ) """
+            debug_stats[
+                'market_value_fallback_nearest'
+            ] += 1
 
-    return total_value
+        total_value += float(value)
+        found_count += 1
+
+        if SHOW_PLAYER_MATCHING:
+
+            tag = (
+                'valor na data/anterior'
+                if is_before_or_equal
+                else 'SEM valor anterior -> usando o mais próximo (fallback)'
+            )
+
+            print(
+                f'  "{player}" -> "{player_key}" '
+                f'=> encontrado ({tag}, referência: {used_date.date()})! '
+                f'valor = €{value:,.0f}  '
+                f'[{found_count}/{MAX_PLAYERS_PER_TEAM}]'
+            )
+
+    if found_count < MAX_PLAYERS_PER_TEAM:
+
+        debug_stats[
+            'market_incomplete_5_players'
+        ] += 1
+
+        if SHOW_PLAYER_MATCHING:
+
+            print(
+                f'  Aviso: apenas {found_count}/{MAX_PLAYERS_PER_TEAM} '
+                f'jogadores com valor de mercado encontrados nesta '
+                f'partida (elenco possuía {len(player_list)} jogador(es))'
+            )
+
+    return total_value, found_count
+
 
 def calculate_recent_form(team):
 
-    recent = team_recent_matches[team]
+    recent = list(team_recent_matches[team])[-LAST_MATCHES_FORM:]
 
-    if len(recent) == 0:
+    if not recent:
 
         return (
-            0,
-            0,
-            0
+            0.0,
+            0.0,
+            0.0
         )
 
-    wins = 0
-
-    goals_scored = 0
-
-    goals_conceded = 0
-
-    for item in recent:
-
-        wins += item['win']
-
-        goals_scored += item[
-            'goals_scored'
-        ]
-
-        goals_conceded += item[
-            'goals_conceded'
-        ]
+    wins = sum(item['win'] for item in recent)
+    goals_scored = sum(item['goals_scored'] for item in recent)
+    goals_conceded = sum(item['goals_conceded'] for item in recent)
 
     total = len(recent)
 
     return (
-
         wins / total,
-
         goals_scored / total,
-
         goals_conceded / total
     )
 
@@ -738,6 +914,58 @@ def expected_result(rating_a, rating_b):
         )
     )
 
+
+def get_competition_weight(competition):
+    """
+    Deriva o peso (K) da partida a partir do texto da competição,
+    seguindo a mesma lógica usada por sistemas de referência como o
+    World Football Elo Ratings (eloratings.net):
+      - Fase final de Copa do Mundo: peso mais alto (60)
+      - Finais de torneios continentais/grandes torneios: peso alto (50)
+      - Eliminatórias (Copa do Mundo, continentais): peso médio (40)
+      - Amistosos: peso mais baixo (20)
+      - Demais torneios/copas regionais: peso médio-baixo (30)
+    """
+
+    comp = str(competition).lower()
+
+    if 'friendl' in comp:
+        return 20
+
+    if 'qualification' in comp:
+        return 40
+
+    if 'world cup' in comp and 'final tournament' in comp:
+        return 60
+
+    if (
+        ('championship' in comp or 'cup' in comp)
+        and 'final tournament' in comp
+    ):
+        return 50
+
+    return 30
+
+
+def goal_diff_multiplier(goal_diff):
+    """
+    Multiplicador clássico de margem de vitória (goal difference),
+    usado no World Football Elo Ratings:
+      - Diferença de 0 ou 1 gol: multiplicador 1.0
+      - Diferença de 2 gols: multiplicador 1.5
+      - Diferença de 3+ gols: multiplicador (11 + diferença) / 8
+    """
+
+    diff = abs(goal_diff)
+
+    if diff <= 1:
+        return 1.0
+
+    if diff == 2:
+        return 1.5
+
+    return (11 + diff) / 8
+
 # =========================================================
 # 11. PROCESSAMENTO CRONOLÓGICO
 # =========================================================
@@ -747,6 +975,18 @@ print('Processando partidas...')
 matches = matches.sort_values('date')
 
 processed_rows = []
+
+# Quantidade de jogadores efetivamente contabilizados no valor de
+# mercado: um valor por time (home e away separados) e um valor
+# por jogo (soma de home + away). Usado para calcular média/mediana
+# ao final do processamento.
+players_found_per_team = []
+players_found_per_match = []
+
+# Controla em qual ano estamos, para aplicar a regressão anual do
+# Elo à média (ver ENABLE_ANNUAL_REGRESSION) sempre que o processamento
+# cronológico avança para um novo ano.
+current_elo_year = None
 
 for idx, row in matches.iterrows():
 
@@ -759,6 +999,29 @@ for idx, row in matches.iterrows():
     home_goals = row['home_goals']
 
     away_goals = row['away_goals']
+
+    # =====================================================
+    # REGRESSÃO ANUAL DO ELO À MÉDIA
+    # =====================================================
+
+    if ENABLE_ANNUAL_REGRESSION:
+
+        match_year = match_date.year
+
+        if current_elo_year is None:
+            current_elo_year = match_year
+
+        while match_year > current_elo_year:
+
+            for team in list(elo_ratings.keys()):
+
+                elo_ratings[team] = (
+                    INITIAL_ELO
+                    + (elo_ratings[team] - INITIAL_ELO)
+                    * (1 - ANNUAL_REGRESSION_FACTOR)
+                )
+
+            current_elo_year += 1
 
     # =====================================================
     # RANKINGS
@@ -787,15 +1050,21 @@ for idx, row in matches.iterrows():
     # MARKET VALUE
     # =====================================================
     
-    home_market = get_market_value(
+    home_market, home_found_count = get_market_value(
         row['home_players'],
-        match_date
+        match_date,
+        team_label=f'HOME: {home_team}'
     )
 
-    away_market = get_market_value(
+    away_market, away_found_count = get_market_value(
         row['away_players'],
-        match_date
+        match_date,
+        team_label=f'AWAY: {away_team}'
     )
+
+    players_found_per_team.append(home_found_count)
+    players_found_per_team.append(away_found_count)
+    players_found_per_match.append(home_found_count + away_found_count)
 
     # =====================================================
     # FORMA RECENTE
@@ -861,15 +1130,23 @@ for idx, row in matches.iterrows():
         away_team
     ]
 
+    # A vantagem de mandante e somada apenas para calcular o
+    # resultado esperado (nao altera o rating 'bruto' que e salvo
+    # como feature no dataset final).
+    home_elo_for_expectation = (
+        home_elo + HOME_ADVANTAGE
+        if ENABLE_HOME_ADVANTAGE
+        else home_elo
+    )
+
     expected_home = expected_result(
-        home_elo,
+        home_elo_for_expectation,
         away_elo
     )
 
-    expected_away = expected_result(
-        away_elo,
-        home_elo
-    )
+    # Simetrico por construcao: expected_away = 1 - expected_home,
+    # mesmo com a vantagem de mandante aplicada apenas do lado home.
+    expected_away = 1 - expected_home
 
     if home_goals > away_goals:
 
@@ -892,16 +1169,28 @@ for idx, row in matches.iterrows():
 
         winner = 'draw'
 
+    match_weight = (
+        get_competition_weight(row['competition'])
+        if ENABLE_COMPETITION_WEIGHT
+        else ELO_K
+    )
+
+    g_multiplier = (
+        goal_diff_multiplier(home_goals - away_goals)
+        if ENABLE_GOAL_DIFF_MULTIPLIER
+        else 1.0
+    )
+
     new_home_elo = (
         home_elo +
-        ELO_K * (
+        match_weight * g_multiplier * (
             home_score - expected_home
         )
     )
 
     new_away_elo = (
         away_elo +
-        ELO_K * (
+        match_weight * g_multiplier * (
             away_score - expected_away
         )
     )
@@ -1153,6 +1442,39 @@ print(
     f'away_market_value = 0: '
     f'{(df["away_market_value"] == 0).sum():,}'
 )
+
+print('\n===================================')
+print('JOGADORES CONTABILIZADOS NO VALOR DE MERCADO')
+print('===================================')
+
+if players_found_per_team:
+
+    print(
+        f'Por time (home e away separados, meta = {MAX_PLAYERS_PER_TEAM}):'
+    )
+
+    print(
+        f'  Média:   {statistics.mean(players_found_per_team):.2f}'
+    )
+
+    print(
+        f'  Mediana: {statistics.median(players_found_per_team):.2f}'
+    )
+
+if players_found_per_match:
+
+    print(
+        f'\nPor jogo (home + away somados, '
+        f'meta = {MAX_PLAYERS_PER_TEAM * 2}):'
+    )
+
+    print(
+        f'  Média:   {statistics.mean(players_found_per_match):.2f}'
+    )
+
+    print(
+        f'  Mediana: {statistics.median(players_found_per_match):.2f}'
+    )
 
 output_file = 'football_matches_ml.csv'
 
