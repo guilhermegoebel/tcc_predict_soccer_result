@@ -353,7 +353,7 @@ print(
 # =========================================================
 
 score_extract = matches['score'].astype(str).str.extract(
-    r'(\d+)\s*:\s*(\d+)'
+    r'(\d+)\s*[:-]\s*(\d+)'
 )
 
 matches['home_goals'] = pd.to_numeric(
