@@ -1,15 +1,3 @@
-# =========================================================
-# DATASET OTIMIZADO PARA ML DE FUTEBOL
-# =========================================================
-# OTIMIZAÇÕES:
-# - cache de jogadores
-# - cache de partidas por seleção
-# - cache H2H
-# - processamento cronológico único
-# - redução de filtros em dataframe
-# - uso de dicionários O(1)
-# =========================================================
-
 import sys
 
 import pandas as pd
@@ -45,33 +33,9 @@ MAX_PLAYERS_PER_TEAM = 5
 
 LAST_MATCHES_FORM = 5
 
-INITIAL_ELO = 1500
-
-# K base, usado apenas quando ENABLE_COMPETITION_WEIGHT = False
-ELO_K = 20
-
-# Se True, o peso (K) de cada partida varia conforme a importância da
-# competição (amistoso pesa menos, fase final de grande torneio pesa
-# mais), em vez de usar sempre o mesmo ELO_K fixo.
-ENABLE_COMPETITION_WEIGHT = True
-
-# Se True, aplica o multiplicador clássico de margem de vitória
-# (diferença de gols) na atualização do Elo: vencer por vários gols
-# de diferença altera o rating mais do que vencer por 1 gol.
-ENABLE_GOAL_DIFF_MULTIPLIER = True
-
-# Se True, soma HOME_ADVANTAGE ao rating do mandante apenas para
-# calcular o resultado esperado (não altera o rating "bruto" salvo
-# como feature). Sem isso, o Elo tende a confundir vantagem de jogar
-# em casa com força real do time.
-ENABLE_HOME_ADVANTAGE = True
-HOME_ADVANTAGE = 100
-
-# Se True, no início de cada novo ano regride uma fração do rating de
-# cada time de volta para o INITIAL_ELO, refletindo a maior incerteza
-# sobre times que ficaram muito tempo sem jogar.
-ENABLE_ANNUAL_REGRESSION = True
-ANNUAL_REGRESSION_FACTOR = 0.30
+# Anos em que houve fase final de Copa do Mundo, usados para a
+# feature 'world_cup'.
+WORLD_CUP_YEARS = {2010, 2014, 2018, 2022, 2026}
 
 DEBUG = True
 
@@ -535,9 +499,9 @@ rankings = rankings.sort_values(
 
 ranking_cache = defaultdict(list)
 
-for _, row in rankings.iterrows():
+for row in rankings.itertuples(index=False):
 
-    sigla = row['team']
+    sigla = row.team
 
     aliases = fifa_aliases.get(
         sigla,
@@ -550,9 +514,9 @@ for _, row in rankings.iterrows():
             alias
         ].append(
             (
-                row['ranking_date'],
-                row['rank'],
-                row['points']
+                row.ranking_date,
+                row.rank,
+                row.points
             )
         )
 
@@ -613,10 +577,6 @@ for player_name in market_cache:
 
 team_recent_matches = defaultdict(
     lambda: deque(maxlen=LAST_MATCHES_FORM)
-)
-
-elo_ratings = defaultdict(
-    lambda: INITIAL_ELO
 )
 
 h2h_cache = defaultdict(list)
@@ -749,7 +709,13 @@ def pick_market_value(player_history, match_date):
     return None, None, False
 
 
-def get_market_value(players, match_date, team_label=None):
+def get_market_value_average(players, match_date, team_label=None):
+    """
+    Retorna o valor médio de mercado do time: soma dos valores dos
+    jogadores encontrados dividida pela quantidade de jogadores para
+    os quais foi possível encontrar um valor (found_count), e não
+    pela quantidade total do elenco.
+    """
 
     if not isinstance(players, str):
 
@@ -783,7 +749,7 @@ def get_market_value(players, match_date, team_label=None):
 
     ordered_candidates = last_n + remaining
 
-    total_value = 0.0
+    sum_value = 0.0
     found_count = 0
 
     if SHOW_PLAYER_MATCHING:
@@ -845,7 +811,7 @@ def get_market_value(players, match_date, team_label=None):
                 'market_value_fallback_nearest'
             ] += 1
 
-        total_value += float(value)
+        sum_value += float(value)
         found_count += 1
 
         if SHOW_PLAYER_MATCHING:
@@ -877,7 +843,13 @@ def get_market_value(players, match_date, team_label=None):
                 f'partida (elenco possuía {len(player_list)} jogador(es))'
             )
 
-    return total_value, found_count
+    average_value = (
+        sum_value / found_count
+        if found_count > 0
+        else 0.0
+    )
+
+    return average_value, found_count
 
 
 def calculate_recent_form(team):
@@ -905,68 +877,6 @@ def calculate_recent_form(team):
     )
 
 # =========================================================
-
-def expected_result(rating_a, rating_b):
-
-    return 1 / (
-        1 + 10 ** (
-            (rating_b - rating_a) / 400
-        )
-    )
-
-
-def get_competition_weight(competition):
-    """
-    Deriva o peso (K) da partida a partir do texto da competição,
-    seguindo a mesma lógica usada por sistemas de referência como o
-    World Football Elo Ratings (eloratings.net):
-      - Fase final de Copa do Mundo: peso mais alto (60)
-      - Finais de torneios continentais/grandes torneios: peso alto (50)
-      - Eliminatórias (Copa do Mundo, continentais): peso médio (40)
-      - Amistosos: peso mais baixo (20)
-      - Demais torneios/copas regionais: peso médio-baixo (30)
-    """
-
-    comp = str(competition).lower()
-
-    if 'friendl' in comp:
-        return 20
-
-    if 'qualification' in comp:
-        return 40
-
-    if 'world cup' in comp and 'final tournament' in comp:
-        return 60
-
-    if (
-        ('championship' in comp or 'cup' in comp)
-        and 'final tournament' in comp
-    ):
-        return 50
-
-    return 30
-
-
-def goal_diff_multiplier(goal_diff):
-    """
-    Multiplicador clássico de margem de vitória (goal difference),
-    usado no World Football Elo Ratings:
-      - Diferença de 0 ou 1 gol: multiplicador 1.0
-      - Diferença de 2 gols: multiplicador 1.5
-      - Diferença de 3+ gols: multiplicador (11 + diferença) / 8
-    """
-
-    diff = abs(goal_diff)
-
-    if diff <= 1:
-        return 1.0
-
-    if diff == 2:
-        return 1.5
-
-    return (11 + diff) / 8
-
-# =========================================================
 # 11. PROCESSAMENTO CRONOLÓGICO
 # =========================================================
 
@@ -983,11 +893,6 @@ processed_rows = []
 players_found_per_team = []
 players_found_per_match = []
 
-# Controla em qual ano estamos, para aplicar a regressão anual do
-# Elo à média (ver ENABLE_ANNUAL_REGRESSION) sempre que o processamento
-# cronológico avança para um novo ano.
-current_elo_year = None
-
 for idx, row in matches.iterrows():
 
     match_date = row['date']
@@ -999,29 +904,6 @@ for idx, row in matches.iterrows():
     home_goals = row['home_goals']
 
     away_goals = row['away_goals']
-
-    # =====================================================
-    # REGRESSÃO ANUAL DO ELO À MÉDIA
-    # =====================================================
-
-    if ENABLE_ANNUAL_REGRESSION:
-
-        match_year = match_date.year
-
-        if current_elo_year is None:
-            current_elo_year = match_year
-
-        while match_year > current_elo_year:
-
-            for team in list(elo_ratings.keys()):
-
-                elo_ratings[team] = (
-                    INITIAL_ELO
-                    + (elo_ratings[team] - INITIAL_ELO)
-                    * (1 - ANNUAL_REGRESSION_FACTOR)
-                )
-
-            current_elo_year += 1
 
     # =====================================================
     # RANKINGS
@@ -1050,13 +932,13 @@ for idx, row in matches.iterrows():
     # MARKET VALUE
     # =====================================================
     
-    home_market, home_found_count = get_market_value(
+    home_market_avg, home_found_count = get_market_value_average(
         row['home_players'],
         match_date,
         team_label=f'HOME: {home_team}'
     )
 
-    away_market, away_found_count = get_market_value(
+    away_market_avg, away_found_count = get_market_value_average(
         row['away_players'],
         match_date,
         team_label=f'AWAY: {away_team}'
@@ -1119,89 +1001,20 @@ for idx, row in matches.iterrows():
             ]
 
     # =====================================================
-    # ELO
+    # RESULTADO DA PARTIDA (usado para o H2H)
     # =====================================================
 
-    home_elo = elo_ratings[
-        home_team
-    ]
-
-    away_elo = elo_ratings[
-        away_team
-    ]
-
-    # A vantagem de mandante e somada apenas para calcular o
-    # resultado esperado (nao altera o rating 'bruto' que e salvo
-    # como feature no dataset final).
-    home_elo_for_expectation = (
-        home_elo + HOME_ADVANTAGE
-        if ENABLE_HOME_ADVANTAGE
-        else home_elo
-    )
-
-    expected_home = expected_result(
-        home_elo_for_expectation,
-        away_elo
-    )
-
-    # Simetrico por construcao: expected_away = 1 - expected_home,
-    # mesmo com a vantagem de mandante aplicada apenas do lado home.
-    expected_away = 1 - expected_home
-
     if home_goals > away_goals:
-
-        home_score = 1
-        away_score = 0
 
         winner = home_team
 
     elif home_goals < away_goals:
 
-        home_score = 0
-        away_score = 1
-
         winner = away_team
 
     else:
 
-        home_score = 0.5
-        away_score = 0.5
-
         winner = 'draw'
-
-    match_weight = (
-        get_competition_weight(row['competition'])
-        if ENABLE_COMPETITION_WEIGHT
-        else ELO_K
-    )
-
-    g_multiplier = (
-        goal_diff_multiplier(home_goals - away_goals)
-        if ENABLE_GOAL_DIFF_MULTIPLIER
-        else 1.0
-    )
-
-    new_home_elo = (
-        home_elo +
-        match_weight * g_multiplier * (
-            home_score - expected_home
-        )
-    )
-
-    new_away_elo = (
-        away_elo +
-        match_weight * g_multiplier * (
-            away_score - expected_away
-        )
-    )
-
-    elo_ratings[
-        home_team
-    ] = new_home_elo
-
-    elo_ratings[
-        away_team
-    ] = new_away_elo
 
     # =====================================================
     # TARGET
@@ -1215,6 +1028,24 @@ for idx, row in matches.iterrows():
 
     else:
         match_result = 1
+
+    # =====================================================
+    # WORLD CUP FLAG
+    # =====================================================
+    # 0 = não é ano/competição de Copa do Mundo
+    # 1 = ano de Copa do Mundo (WORLD_CUP_YEARS), sem menção explícita
+    #     de "world cup" no nome da competição
+    # 2 = competição contém "world cup" no nome (case-insensitive),
+    #     tem prioridade sobre a checagem por ano
+
+    if 'world cup' in str(row['competition']).lower():
+        world_cup = 2
+
+    elif match_date.year in WORLD_CUP_YEARS:
+        world_cup = 1
+
+    else:
+        world_cup = 0
 
     # =====================================================
     # FEATURE ENGINEERING
@@ -1271,14 +1102,20 @@ for idx, row in matches.iterrows():
             else np.nan
         ),
 
-        'home_market_value':
-        home_market,
+        'home_market_value_avg':
+        home_market_avg,
 
-        'away_market_value':
-        away_market,
+        'away_market_value_avg':
+        away_market_avg,
 
-        'market_value_diff':
-        home_market - away_market,
+        'market_value_avg_diff':
+        home_market_avg - away_market_avg,
+
+        'home_found_count':
+        home_found_count,
+
+        'away_found_count':
+        away_found_count,
 
         'home_recent_win_rate':
         home_win_rate,
@@ -1310,29 +1147,14 @@ for idx, row in matches.iterrows():
         'h2h_goal_diff':
         h2h_goal_diff,
 
-        'home_elo':
-        home_elo,
-
-        'away_elo':
-        away_elo,
-
-        'elo_diff':
-        home_elo - away_elo,
-
         'year':
         match_date.year,
 
         'month':
         match_date.month,
 
-        'is_world_cup_year':
-        1 if match_date.year in [
-            2010,
-            2014,
-            2018,
-            2022,
-            2026
-        ] else 0,
+        'world_cup':
+        world_cup,
 
         'match_result':
         match_result
@@ -1434,13 +1256,13 @@ print(
 )
 
 print(
-    f'home_market_value = 0: '
-    f'{(df["home_market_value"] == 0).sum():,}'
+    f'home_market_value_avg = 0: '
+    f'{(df["home_market_value_avg"] == 0).sum():,}'
 )
 
 print(
-    f'away_market_value = 0: '
-    f'{(df["away_market_value"] == 0).sum():,}'
+    f'away_market_value_avg = 0: '
+    f'{(df["away_market_value_avg"] == 0).sum():,}'
 )
 
 print('\n===================================')
