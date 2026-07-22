@@ -1,215 +1,101 @@
-# Dicionário de Dados — `football_matches_ml.csv`
-
-| Variável                     | Tipo     | Descrição                                                                                                  |
-| ---------------------------- | -------- | ---------------------------------------------------------------------------------------------------------- |
-| `match_id`                   | Inteiro  | Identificador único da partida                                                                             |
-| `date`                       | Data     | Data da partida                                                                                            |
-| `competition`                | Texto    | Competição do jogo                                                                                         |
-| `home_team`                  | Texto    | Seleção mandante                                                                                           |
-| `away_team`                  | Texto    | Seleção visitante                                                                                          |
-| `home_goals`                 | Inteiro  | Gols marcados pela seleção mandante                                                                        |
-| `away_goals`                 | Inteiro  | Gols marcados pela seleção visitante                                                                       |
-| `home_rank`                  | Numérico | Ranking FIFA da seleção mandante antes da partida                                                          |
-| `away_rank`                  | Numérico | Ranking FIFA da seleção visitante antes da partida                                                         |
-| `home_points`                | Numérico | Pontuação FIFA da seleção mandante                                                                         |
-| `away_points`                | Numérico | Pontuação FIFA da seleção visitante                                                                        |
-| `rank_diff`                  | Numérico | Diferença entre rankings FIFA (`away_rank - home_rank`)                                                    |
-| `points_diff`                | Numérico | Diferença entre pontos FIFA (`home_points - away_points`)                                                  |
-| `home_market_value`          | Numérico | Soma do valor de mercado dos últimos 5 jogadores da escalação mandante                                     |
-| `away_market_value`          | Numérico | Soma do valor de mercado dos últimos 5 jogadores da escalação visitante                                    |
-| `market_value_diff`          | Numérico | Diferença entre valores de mercado (`home_market_value - away_market_value`)                               |
-| `home_recent_win_rate`       | Numérico | Taxa de vitórias da seleção mandante nos últimos N jogos                                                   |
-| `away_recent_win_rate`       | Numérico | Taxa de vitórias da seleção visitante nos últimos N jogos                                                  |
-| `home_recent_goals_scored`   | Numérico | Média de gols marcados pela seleção mandante nos últimos jogos                                             |
-| `away_recent_goals_scored`   | Numérico | Média de gols marcados pela seleção visitante nos últimos jogos                                            |
-| `home_recent_goals_conceded` | Numérico | Média de gols sofridos pela seleção mandante nos últimos jogos                                             |
-| `away_recent_goals_conceded` | Numérico | Média de gols sofridos pela seleção visitante nos últimos jogos                                            |
-| `h2h_home_wins`              | Inteiro  | Quantidade de vitórias históricas do mandante em confrontos diretos                                        |
-| `h2h_away_wins`              | Inteiro  | Quantidade de vitórias históricas do visitante em confrontos diretos                                       |
-| `h2h_draws`                  | Inteiro  | Quantidade de empates históricos entre as seleções                                                         |
-| `h2h_goal_diff`              | Numérico | Saldo de gols histórico do mandante nos confrontos diretos                                                 |
-| `home_elo`                   | Numérico | Rating Elo da seleção mandante antes da partida                                                            |
-| `away_elo`                   | Numérico | Rating Elo da seleção visitante antes da partida                                                           |
-| `elo_diff`                   | Numérico | Diferença entre ratings Elo (`home_elo - away_elo`)                                                        |
-| `year`                       | Inteiro  | Ano da realização da partida                                                                               |
-| `month`                      | Inteiro  | Mês da realização da partida                                                                               |
-| `is_world_cup_year`          | Binário  | Indica se o jogo ocorreu em ano de Copa do Mundo (`1 = sim`, `0 = não`)                                    |
-| `match_result`               | Inteiro  | Variável alvo da classificação multiclasse (`2 = vitória mandante`, `1 = empate`, `0 = vitória visitante`) |
-
----
-
-# Variáveis derivadas
-
-## Diferença de ranking FIFA
-
-rank_diff = away_rank - home_rank
-
----
-
-## Diferença de pontos FIFA
-
-points_diff = home_points - away_points
-
----
-
-## Diferença de valor de mercado
-
-market_value_diff = home_market_value - away_market_value
-
----
-
-## Diferença Elo
-
-elo_diff = home_elo - away_elo
-
----
-
-# Variável alvo
-
-## Resultado da partida
-
-| Valor | Classe                       |
-| ----- | ---------------------------- |
-| 2     | Vitória da seleção mandante  |
-| 1     | Empate                       |
-| 0     | Vitória da seleção visitante |
-
----
-
-# Observações metodológicas
-
-* Rankings FIFA são associados à partida utilizando a data mais próxima anterior ao jogo.
-* Valores de mercado são calculados com base nos últimos registros anteriores à data da partida.
-* O cálculo de forma recente utiliza os últimos `N` jogos anteriores da seleção.
-* O Elo é atualizado dinamicamente em ordem cronológica ao longo das partidas.
-* Os confrontos diretos (`H2H`) consideram apenas jogos anteriores à partida analisada.
-
---------------------------------------------------------------------------
-
-# Cálculo do Rating Elo
-
-O sistema Elo é um método de pontuação dinâmica utilizado para medir a força relativa de equipes ao longo do tempo. No conjunto de dados, o Elo foi utilizado para representar o desempenho acumulado das seleções nacionais antes de cada partida.
-
-Cada seleção inicia com uma pontuação base:
-
-Elo_{inicial} = 1500
-
-Após cada jogo, o rating é atualizado considerando:
-
-* força do adversário;
-* resultado obtido;
-* expectativa pré-jogo.
-
----
-
-# Probabilidade esperada
-
-Antes da partida, calcula-se a expectativa de vitória da seleção mandante utilizando:
-
-E_A = \frac{1}{1 + 10^{(R_B - R_A)/400}}
-
-Onde:
-
-| Símbolo | Descrição                            |
-| ------- | ------------------------------------ |
-| (E_A)   | expectativa de resultado da equipe A |
-| (R_A)   | Elo atual da equipe A                |
-| (R_B)   | Elo atual da equipe B                |
-
-O mesmo cálculo é realizado para a equipe visitante.
-
----
-
-# Resultado real da partida
-
-O resultado real é representado por:
-
-| Resultado | Valor |
-| --------- | ----- |
-| Vitória   | 1     |
-| Empate    | 0.5   |
-| Derrota   | 0     |
-
----
-
-# Atualização do Elo
-
-Após o término da partida, o novo rating é calculado pela fórmula:
-
-R'_A = R_A + K(S_A - E_A)
-
-Onde:
-
-| Símbolo | Descrição          |
-| ------- | ------------------ |
-| (R'_A)  | novo Elo da equipe |
-| (R_A)   | Elo anterior       |
-| (K)     | fator de ajuste    |
-| (S_A)   | resultado real     |
-| (E_A)   | resultado esperado |
-
-No projeto foi utilizado:
-
-K = 20
-
----
-
-# Interpretação
-
-O sistema funciona da seguinte forma:
-
-* vencer adversários fortes aumenta mais o Elo;
-* perder para equipes fracas reduz mais o Elo;
-* empates ajustam o rating de forma intermediária;
-* equipes com desempenho consistente acumulam ratings maiores ao longo do tempo.
-
----
-
-# Exemplo simplificado
-
-Considere:
-
-| Seleção | Elo  |
-| ------- | ---- |
-| Brasil  | 1700 |
-| Japão   | 1500 |
-
-O Brasil possui maior expectativa de vitória. Caso:
-
-* o Brasil vença, o ajuste será pequeno;
-* o Japão vença, o ganho do Japão será elevado e a perda do Brasil significativa.
-
----
-
-# Uso no dataset
-
-Para cada partida foram armazenadas as variáveis:
-
-* `home_elo`
-* `away_elo`
-* `elo_diff`
-
-A feature `elo_diff` representa:
-
-elo_diff = home_elo - away_elo
-
-Valores positivos indicam vantagem histórica da equipe mandante segundo o sistema Elo.
-
----
-FILES: rankings_fifa + matches + valor_mercado_jogadores + paises_siglas_relacao
-            ↓
-script.py
-            ↓
-football_matches_ml.csv
-            ↓
-dataset_copa2026.py
-            ↓
-football_matches_ml_worldcup2026.csv
-            ↓
-xgboost_ml.py 
-            ↓
-worldcup_2026_group_stage.csv
-            ↓
-Predição
-            ↓
-worldcup_2026_predictions.csv
+# Projeto de ML para previsão de resultados de partidas
+
+Este diretório reúne o pipeline de preparação de dados e treino de um classificador para prever o resultado de partidas de futebol com base em características históricas e de desempenho recente.
+
+## Estrutura
+
+- `script.py`: gera o dataset principal `football_matches_ml.csv` a partir de:
+  - `matches.csv`
+  - `rankings_fifa.csv`
+  - `valor_mercado_jogadores.csv`
+  - `paises_siglas_relacao.csv`
+- `dataset_copa2026.py`: filtra partidas envolvendo seleções classificadas para a Copa do Mundo de 2026.
+- `ML_XGBoost_01/train_xgboost.py`: treina um modelo XGBoost com split temporal e avaliação em validação/teste.
+- `ML_XGBoost_01/predict_2026.py`: aplica o modelo treinado a partidas de 2026 e gera um comparativo real vs predito.
+
+## Dataset principal
+
+O arquivo gerado é `football_matches_ml.csv`.
+
+### Dicionário de colunas
+
+| Coluna | Tipo | Descrição |
+| --- | --- | --- |
+| `match_id` | inteiro | Identificador único da partida. |
+| `date` | data | Data da partida. |
+| `competition` | texto | Competição da partida. |
+| `home_team` | texto | Seleção mandante. |
+| `away_team` | texto | Seleção visitante. |
+| `home_goals` | inteiro | Gols do mandante na partida. |
+| `away_goals` | inteiro | Gols do visitante na partida. |
+| `home_rank` | numérico | Ranking FIFA da seleção mandante antes do jogo. |
+| `away_rank` | numérico | Ranking FIFA da seleção visitante antes do jogo. |
+| `home_points` | numérico | Pontos FIFA do mandante antes da partida. |
+| `away_points` | numérico | Pontos FIFA do visitante antes da partida. |
+| `rank_diff` | numérico | Diferença `away_rank - home_rank`. |
+| `points_diff` | numérico | Diferença `home_points - away_points`. |
+| `home_market_value_avg` | numérico | Média do valor de mercado dos jogadores do mandante encontrados para a partida. |
+| `away_market_value_avg` | numérico | Média do valor de mercado dos jogadores do visitante encontrados para a partida. |
+| `market_value_avg_diff` | numérico | Diferença `home_market_value_avg - away_market_value_avg`. |
+| `home_found_count` | inteiro | Quantidade de jogadores com valor de mercado encontrado para o mandante. |
+| `away_found_count` | inteiro | Quantidade de jogadores com valor de mercado encontrado para o visitante. |
+| `home_recent_win_rate` | numérico | Taxa de vitórias recentes do mandante. |
+| `away_recent_win_rate` | numérico | Taxa de vitórias recentes do visitante. |
+| `home_recent_goals_scored` | numérico | Média de gols marcados nos últimos jogos do mandante. |
+| `away_recent_goals_scored` | numérico | Média de gols marcados nos últimos jogos do visitante. |
+| `home_recent_goals_conceded` | numérico | Média de gols sofridos nos últimos jogos do mandante. |
+| `away_recent_goals_conceded` | numérico | Média de gols sofridos nos últimos jogos do visitante. |
+| `h2h_home_wins` | inteiro | Vitórias históricas do mandante no histórico direto. |
+| `h2h_away_wins` | inteiro | Vitórias históricas do visitante no histórico direto. |
+| `h2h_draws` | inteiro | Empates históricos no confronto direto. |
+| `h2h_goal_diff` | numérico | Saldo de gols histórico do mandante no confronto direto. |
+| `year` | inteiro | Ano da partida. |
+| `month` | inteiro | Mês da partida. |
+| `world_cup` | binário | Indicador de ano de Copa do Mundo (`1 = sim`, `0 = não`). |
+| `match_result` | inteiro | Target do modelo: `0 = vitória visitante`, `1 = empate`, `2 = vitória mandante`. |
+
+## Observações metodológicas
+
+- Os rankings FIFA são associados à partida pela data mais próxima anterior ao jogo.
+- Os valores de mercado usam o histórico do jogador e procuram o valor mais próximo e anterior à data da partida, com fallback para o registro mais próximo disponível em caso necessário.
+- As features de forma recente usam os últimos jogos cronológicos de cada seleção.
+- O histórico direto (`h2h_*`) considera apenas jogos anteriores à partida em análise.
+- O dataset foi construído em ordem cronológica, evitando vazamento temporal na geração das features.
+
+## Pipeline de ML
+
+A modelagem em `ML_XGBoost_01/train_xgboost.py` usa:
+
+1. `bucketização` da coluna `competition` em categorias simples.
+2. `split temporal` para treino/validação/teste.
+3. `frequency encoding` para times, calculado apenas no conjunto de treino.
+4. `sample weights` balanceados para reduzir o viés de classe.
+5. `XGBoost` com `early stopping` para evitar overfitting.
+
+### Arquivos gerados no treino
+
+- `xgb_match_result.json`: modelo treinado em formato XGBoost.
+- `preprocessing_artifacts.pkl`: artefatos usados para reaplicar o mesmo pré-processamento em novos dados.
+- `confusion_matrix.png`: matriz de confusão do conjunto de teste.
+- `feature_importance.png`: importância das features.
+
+## Saídas de predição
+
+O script `ML_XGBoost_01/predict_2026.py` produz:
+
+- `comparativo_real_vs_predito_2026.csv`: tabela com resultado real e predito para as partidas de 2026.
+- `football_matches_ml_worldcup2026.csv`: subconjunto de partidas envolvendo seleções classificadas para a Copa de 2026.
+
+## Como usar
+
+1. Execute `script.py` para gerar o dataset principal.
+2. Execute `ML_XGBoost_01/train_xgboost.py` para treinar o modelo.
+3. Execute `ML_XGBoost_01/predict_2026.py` para gerar previsões para 2026.
+
+## Target do modelo
+
+| Valor | Classe |
+| --- | --- |
+| `0` | Vitória visitante |
+| `1` | Empate |
+| `2` | Vitória mandante |
