@@ -41,11 +41,11 @@ Para mitigar o efeito de classe desbalanceada e o viés histórico de vitórias 
 
 ### 6. Otimização de hiperparâmetros (Hyperparameter Tuning)
 
-No lugar do *early stopping* (utilizado no XGBoost), o controle de *overfitting* e a busca pela melhor arquitetura foram realizados através do `RandomizedSearchCV`. O processo iterou sobre diferentes combinações usando validação cruzada (`cv=3`).
+No lugar do *early stopping* (utilizado no XGBoost), o controle de *overfitting* e a busca pela melhor arquitetura foram realizados através do `RandomizedSearchCV`. O processo iterou sobre diferentes combinações utilizando um *split* temporal fixo (`PredefinedSplit`). Isso garantiu que o Random Forest utilizasse exatamente a mesma base de validação (2022-2023) empregada pelo modelo de referência, assegurando uma comparação metodologicamente justa.
 
 ## Modelo principal
 
-O modelo final foi treinado utilizando o `RandomForestClassifier` com a melhor configuração encontrada durante os testes de validação cruzada:
+O modelo final assumiu a melhor configuração determinística encontrada durante a busca (fixada através do `random_state=42`):
 
 - `n_estimators=300` (quantidade de árvores)
 - `max_depth=5` (limite raso para generalização e controle de overfitting)
@@ -74,6 +74,7 @@ O modelo é avaliado no conjunto de teste com as seguintes métricas:
 Após a execução do treinamento (`train_rf.py`), são produzidos os seguintes artefatos:
 
 - `rf_match_result_model.pkl` — modelo treinado e otimizado em formato pickle.
+- `rf_imputer.pkl` — objeto de imputação da mediana, ajustado exclusivamente com os dados de treino para evitar *data leakage* em predições futuras.
 - `rf_confusion_matrix.png` — matriz de confusão no conjunto de teste.
 - `rf_feature_importance.png` — gráfico listando o impacto de cada variável na decisão das árvores.
 
@@ -82,6 +83,7 @@ Após a execução do treinamento (`train_rf.py`), são produzidos os seguintes 
 O script `predict_2026_rf.py` carrega:
 
 - O modelo Random Forest salvo em `rf_match_result_model.pkl`
+- O preenchedor de nulos salvo em `rf_imputer.pkl`
 - Os artefatos base em `preprocessing_artifacts.pkl`
 
 O pipeline reaplica o tratamento exato aos dados (incluindo o `SimpleImputer` para preencher os valores nulos com a mediana do treino) e gera um CSV comparativo com:
