@@ -4,7 +4,7 @@ Treino de um modelo Random Forest para prever o resultado de partidas
 a partir do dataset gerado por script.py - football_matches_ml.csv
 
 Pré-requisito:
-    Ter rodado o script train_xgboost.pys previamente 
+    Ter rodado o script train_xgboost.py previamente 
     para gerar o arquivo preprocessing_artifacts.pkl.
 
 Requisitos:
@@ -15,7 +15,6 @@ Uso:
 """
 
 import pickle
-import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
@@ -25,7 +24,7 @@ from sklearn.metrics import f1_score, log_loss, classification_report, confusion
 from sklearn.model_selection import RandomizedSearchCV
 
 # =============================================================
-# CAMINHOS DOS ARQUIVOS
+# CAMINHOS DOS ARQUIVOS (ajustar caso necessário)
 # =============================================================
 INPUT_FILE = '../football_matches_ml.csv'
 ARTIFACTS_FILE = '../ML_XGBoost_01/preprocessing_artifacts.pkl'
@@ -164,6 +163,11 @@ print(classification_report(y_test, y_pred, target_names=['away_win', 'draw', 'h
 with open('rf_match_result_model.pkl', 'wb') as f:
     pickle.dump(best_model, f)
 print("\nModelo Random Forest otimizado salvo em 'rf_match_result_model.pkl'")
+
+# Salvando o Imputer treinado
+with open('rf_imputer.pkl', 'wb') as f:
+    pickle.dump(imputer, f)
+print("Imputer da mediana salvo em 'rf_imputer.pkl'")
 
 cm = confusion_matrix(y_test, y_pred, labels=[0, 1, 2])
 disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=['away_win', 'draw', 'home_win'])

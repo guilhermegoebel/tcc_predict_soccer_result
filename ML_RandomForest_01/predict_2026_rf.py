@@ -20,6 +20,7 @@ from sklearn.impute import SimpleImputer
 # Volta uma pasta para ler a base de 2026 na raiz do projeto
 INPUT_FILE = '../football_matches_2026.csv'
 MODEL_FILE = 'rf_match_result_model.pkl'
+IMPUTER_FILE = 'rf_imputer.pkl' 
 ARTIFACTS_FILE = '../ML_XGBoost_01/preprocessing_artifacts.pkl'
 OUTPUT_FILE = 'comparativo_real_vs_predito_2026_rf.csv'
 
@@ -31,6 +32,10 @@ TARGET_COLUMN = 'match_result'
 # =============================================================
 with open(MODEL_FILE, 'rb') as f:
     model = pickle.load(f)
+
+# Carregar o Imputer treinado
+with open(IMPUTER_FILE, 'rb') as f:
+    imputer = pickle.load(f)
 
 with open(ARTIFACTS_FILE, 'rb') as f:
     artifacts = pickle.load(f)
@@ -88,8 +93,7 @@ if missing_features:
 X = df[feature_columns]
 
 # Imputação de NaNs com a mediana (necessário para o Random Forest)
-imputer = SimpleImputer(strategy='median')
-X_imp = imputer.fit_transform(X)
+X_imp = imputer.transform(X)
 
 # =============================================================
 # 6. PREDIÇÃO
