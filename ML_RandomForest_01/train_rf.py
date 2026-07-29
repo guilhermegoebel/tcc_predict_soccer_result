@@ -15,13 +15,14 @@ Uso:
 """
 
 import pickle
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.impute import SimpleImputer
 from sklearn.metrics import f1_score, log_loss, classification_report, confusion_matrix, ConfusionMatrixDisplay
-from sklearn.model_selection import RandomizedSearchCV
+from sklearn.model_selection import RandomizedSearchCV, PredefinedSplit
 
 # =============================================================
 # CAMINHOS DOS ARQUIVOS (ajustar caso necessário)
@@ -85,41 +86,60 @@ df_test = df.loc[test_mask].copy()
 X_train = df_train[feature_columns]
 y_train = df_train[TARGET_COLUMN]
 
+X_val = df_val[feature_columns]
+y_val = df_val[TARGET_COLUMN]
+
 X_test = df_test[feature_columns]
 y_test = df_test[TARGET_COLUMN]
 
 # =============================================================
-# 4. IMPUTAÇÃO DE VALORES NULOS
+# 4. IMPUTAÇÃO DE VALORES NULOS (Treino e Validação)
 # =============================================================
+# Ajustamos o imputer APENAS no treino, e aplicamos nas demais bases
 imputer = SimpleImputer(strategy='median')
 X_train_imp = imputer.fit_transform(X_train)
-X_test_imp = imputer.transform(X_test)
+X_val_imp = imputer.transform(X_val)    # Validação recebe a mediana do treino
+X_test_imp = imputer.transform(X_test)  # Teste recebe a mediana do treino
 
 # =============================================================
-# 5. BUSCA DE HIPERPARÂMETROS E TESTE DE ÁRVORES
+# 5. BUSCA DE HIPERPARÂMETROS COM SPLIT TEMPORAL (PredefinedSplit)
 # =============================================================
 print("\nIniciando testes com diferentes configurações de árvores...")
 
+# Empilhamos o Treino e a Validação para passar para o otimizador
+X_search = np.vstack((X_train_imp, X_val_imp))
+y_search = pd.concat([y_train, y_val], axis=0).reset_index(drop=True)
+
+# Lista dizendo a qual conjunto cada linha pertence
+# -1 = Usar para treinar a árvore
+#  0 = Usar para testar/validar o resultado
+test_fold = np.concatenate([
+    np.full(X_train_imp.shape[0], -1), 
+    np.full(X_val_imp.shape[0], 0)     
+])
+
+ps = PredefinedSplit(test_fold)
+
 param_grid = {
-    'n_estimators': [100, 200, 300],  # Quantidades muito mais rápidas de processar
+    'n_estimators': [100, 200, 300],
     'max_depth': [5, 8, 10],            
     'min_samples_leaf': [5, 10]         
 }
 
 rf_base = RandomForestClassifier(class_weight='balanced', random_state=42, n_jobs=-1)
 
-# O RandomizedSearchCV testa combinações aleatórias dentro do grid
 random_search = RandomizedSearchCV(
     estimator=rf_base,
     param_distributions=param_grid,
-    n_iter=10,             # Vai sortear e testar 10 combinações diferentes
+    n_iter=10,             
     scoring='f1_macro', 
-    cv=3,                  # Validação cruzada em 3 partes dentro do treino
+    cv=ps,                  
     random_state=42,
     n_jobs=-1
 )
 
-random_search.fit(X_train_imp, y_train)
+# Agora o fit roda na base empilhada, mas respeitando estritamente o tempo
+random_search.fit(X_search, y_search)
 
 # --- IMPRIMINDO TODAS AS CONFIGURAÇÕES TESTADAS ---
 print("\n=============================================")
@@ -129,13 +149,12 @@ results = random_search.cv_results_
 
 for i in range(len(results['params'])):
     print(f"Configuração {i+1}: {results['params'][i]}")
-    print(f" -> F1-Macro Médio (Validação Cruzada): {results['mean_test_score'][i]:.4f} (Desvio Padrão: {results['std_test_score'][i]:.4f})\n")
+    print(f" -> F1-Macro Médio (Base de Validação 22-23): {results['mean_test_score'][i]:.4f}\n")
 
 print("=============================================")
 print(f"MELHORES PARÂMETROS ENCONTRADOS:\n{random_search.best_params_}")
 print("=============================================\n")
 
-# O melhor modelo assume o lugar para fazermos a avaliação final no conjunto de teste
 best_model = random_search.best_estimator_
 
 # =============================================================
