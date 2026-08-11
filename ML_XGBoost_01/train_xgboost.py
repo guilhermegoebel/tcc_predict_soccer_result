@@ -22,7 +22,10 @@ from sklearn.metrics import (
     log_loss,
     classification_report,
     confusion_matrix,
-    ConfusionMatrixDisplay
+    ConfusionMatrixDisplay,
+    balanced_accuracy_score,
+    precision_score,
+    recall_score
 )
 from sklearn.utils.class_weight import compute_sample_weight
 
@@ -34,10 +37,9 @@ INPUT_FILE = 'football_matches_ml.csv'
 
 # Split temporal: nunca aleatório, porque features como h2h_* e
 # recent_* dependem do histórico acumulado cronologicamente.
-# Ajuste os anos conforme o range real da sua base.
 TRAIN_END_YEAR = 2021      # treino: até este ano (inclusive)
 VAL_END_YEAR = 2023        # validação (early stopping): anos seguintes
-                            # teste: tudo depois de VAL_END_YEAR
+                           # teste: tudo depois de VAL_END_YEAR
 
 # Colunas que não entrar como feature (identificadores, ou redundantes)
 DROP_COLUMNS = [
@@ -45,8 +47,8 @@ DROP_COLUMNS = [
     'date',
     'home_goals',       # vazamento: só se sabe depois do jogo
     'away_goals',       # vazamento: idem
-    'rank_diff',        # redundante com home_rank/away_rank 
-    'points_diff',      # redundante com home_points/away_points
+    #'rank_diff',        # redundante com home_rank/away_rank 
+    #'points_diff',      # redundante com home_points/away_points
     'match_result'      # é o target
 ]
 
@@ -262,20 +264,48 @@ print(f'\nMelhor iteração (early stopping): {model.best_iteration}')
 
 
 # =============================================================
-# 8. AVALIAÇÃO NO TESTE
+# 8. AVALIAÇÃO NA VALIDAÇÃO E NO TESTE
 # =============================================================
+
+y_val_pred = model.predict(X_val)
+y_val_pred_proba = model.predict_proba(X_val)
 
 y_pred = model.predict(X_test)
 y_pred_proba = model.predict_proba(X_test)
 
+val_f1_macro = f1_score(y_val, y_val_pred, average='macro')
+val_log_loss = log_loss(y_val, y_val_pred_proba, labels=[0, 1, 2])
+val_balanced_accuracy = balanced_accuracy_score(y_val, y_val_pred)
+val_precision_macro = precision_score(y_val, y_val_pred, average='macro', zero_division=0)
+val_recall_macro = recall_score(y_val, y_val_pred, average='macro', zero_division=0)
+val_accuracy = (y_val == y_val_pred).mean()
+
 test_f1_macro = f1_score(y_test, y_pred, average='macro')
 test_log_loss = log_loss(y_test, y_pred_proba, labels=[0, 1, 2])
+test_balanced_accuracy = balanced_accuracy_score(y_test, y_pred)
+test_precision_macro = precision_score(y_test, y_pred, average='macro', zero_division=0)
+test_recall_macro = recall_score(y_test, y_pred, average='macro', zero_division=0)
+test_accuracy = (y_test == y_pred).mean()
+
+print('\n===================================')
+print('RESULTADOS NO CONJUNTO DE VALIDAÇÃO')
+print('===================================')
+print(f'F1-macro: {val_f1_macro:.4f}')
+print(f'Log-loss: {val_log_loss:.4f}')
+print(f'Balanced accuracy: {val_balanced_accuracy:.4f}')
+print(f'Precision macro: {val_precision_macro:.4f}')
+print(f'Recall macro: {val_recall_macro:.4f}')
+print(f'Accuracy: {val_accuracy:.4f}')
 
 print('\n===================================')
 print('RESULTADOS NO CONJUNTO DE TESTE')
 print('===================================')
 print(f'F1-macro: {test_f1_macro:.4f}')
 print(f'Log-loss: {test_log_loss:.4f}')
+print(f'Balanced accuracy: {test_balanced_accuracy:.4f}')
+print(f'Precision macro: {test_precision_macro:.4f}')
+print(f'Recall macro: {test_recall_macro:.4f}')
+print(f'Accuracy: {test_accuracy:.4f}')
 
 print('\nClassification report (0=away, 1=draw, 2=home):')
 print(
@@ -290,10 +320,85 @@ print(
 # serve para confirmar que o modelo aprendeu algo além do viés.
 baseline_pred = np.full_like(y_test, fill_value=2)
 baseline_f1 = f1_score(y_test, baseline_pred, average='macro')
+baseline_balanced_accuracy = balanced_accuracy_score(y_test, baseline_pred)
+baseline_precision_macro = precision_score(y_test, baseline_pred, average='macro', zero_division=0)
+baseline_recall_macro = recall_score(y_test, baseline_pred, average='macro', zero_division=0)
+baseline_accuracy = (y_test == baseline_pred).mean()
 print(
     f'Baseline "sempre mandante vence" — F1-macro: {baseline_f1:.4f} '
     f'(o modelo deve superar isso claramente)'
 )
+
+# =============================================================
+# 8b. RELATÓRIO DE MÉTRICAS
+# =============================================================
+
+evaluation_metrics = {
+    'validation': {
+        'split': 'validation',
+        'num_samples': int(len(y_val)),
+        'accuracy': float(val_accuracy),
+        'f1_macro': float(val_f1_macro),
+        'log_loss': float(val_log_loss),
+        'balanced_accuracy': float(val_balanced_accuracy),
+        'precision_macro': float(val_precision_macro),
+        'recall_macro': float(val_recall_macro),
+        'classification_report': classification_report(
+            y_val,
+            y_val_pred,
+            target_names=['away_win', 'draw', 'home_win'],
+            output_dict=True
+        )
+    },
+    'test': {
+        'split': 'test',
+        'num_samples': int(len(y_test)),
+        'accuracy': float(test_accuracy),
+        'f1_macro': float(test_f1_macro),
+        'log_loss': float(test_log_loss),
+        'balanced_accuracy': float(test_balanced_accuracy),
+        'precision_macro': float(test_precision_macro),
+        'recall_macro': float(test_recall_macro),
+        'classification_report': classification_report(
+            y_test,
+            y_pred,
+            target_names=['away_win', 'draw', 'home_win'],
+            output_dict=True
+        )
+    },
+    'baseline_test': {
+        'split': 'baseline_test',
+        'num_samples': int(len(y_test)),
+        'accuracy': float(baseline_accuracy),
+        'f1_macro': float(baseline_f1),
+        'log_loss': None,
+        'balanced_accuracy': float(baseline_balanced_accuracy),
+        'precision_macro': float(baseline_precision_macro),
+        'recall_macro': float(baseline_recall_macro),
+        'classification_report': None
+    }
+}
+
+with open('evaluation_metrics.json', 'w', encoding='utf-8') as f:
+    json.dump(evaluation_metrics, f, indent=2, ensure_ascii=False)
+
+metrics_df = pd.DataFrame([
+    {
+        'split': row['split'],
+        'num_samples': row['num_samples'],
+        'accuracy': row['accuracy'],
+        'f1_macro': row['f1_macro'],
+        'log_loss': row['log_loss'],
+        'balanced_accuracy': row['balanced_accuracy'],
+        'precision_macro': row['precision_macro'],
+        'recall_macro': row['recall_macro']
+    }
+    for row in evaluation_metrics.values()
+])
+
+metrics_df.to_csv('evaluation_metrics.csv', index=False)
+print('\nRelatório de métricas salvo em evaluation_metrics.csv')
+print('Relatório de métricas estruturado salvo em evaluation_metrics.json')
 
 
 # =============================================================

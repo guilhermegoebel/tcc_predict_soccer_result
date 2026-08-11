@@ -10,6 +10,7 @@ Uso:
     python predict_2026.py
 """
 
+import json
 import pickle
 
 import pandas as pd
@@ -176,3 +177,19 @@ print(df_out.head(10).to_string())
 if has_real_result:
     acc = df_out['acertou'].mean()
     print(f'\nAcurácia simples na base 2026: {acc:.4f}')
+    prediction_metrics = {
+        'num_matches': int(len(df_out)),
+        'has_real_result': True,
+        'accuracy': float(acc)
+    }
+else:
+    prediction_metrics = {
+        'num_matches': int(len(df_out)),
+        'has_real_result': False,
+        'accuracy': None
+    }
+
+with open('prediction_metrics.json', 'w', encoding='utf-8') as f:
+    json.dump(prediction_metrics, f, indent=2, ensure_ascii=False)
+
+print('Métricas de predição salvas em prediction_metrics.json')

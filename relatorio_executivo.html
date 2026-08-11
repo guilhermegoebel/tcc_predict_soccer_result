@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Relatório Executivo - Previsão de Resultados de Futebol</title>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: #edf2f7; color: #1f2937; }
+    .page { max-width: 1100px; margin: 0 auto; padding: 32px 24px 48px; }
+    h1 { margin-bottom: 12px; font-size: 2.4em; letter-spacing: -0.03em; }
+    h2 { color: #0f4c81; margin-top: 0; margin-bottom: 18px; }
+    h3 { margin-bottom: 12px; }
+    p { line-height: 1.7; margin: 0 0 16px; }
+    ul { margin: 0 0 16px 20px; }
+    .summary { background: #eff6ff; border-left: 6px solid #1f4e79; padding: 22px; margin-bottom: 28px; border-radius: 12px; box-shadow: 0 12px 30px rgba(15, 77, 132, 0.08); }
+    .section { background: #ffffff; border-radius: 14px; padding: 24px; margin-bottom: 28px; box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06); }
+    .table-responsive { overflow-x: auto; }
+    table { border-collapse: separate; border-spacing: 0; width: 100%; margin-bottom: 18px; }
+    th, td { padding: 14px 16px; }
+    th { background: #e9eff8; color: #1f3d73; text-align: left; font-weight: 700; border-bottom: 2px solid #d0d9e9; }
+    td { border-bottom: 1px solid #e2e8f0; }
+    tbody tr:nth-child(odd) { background: #fbfcff; }
+    .metric-name { width: 220px; }
+    .center { text-align: center; }
+    .image-frame { border: none; padding: 16px; background: #f8fafc; border-radius: 12px; box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.15); }
+    .note { font-size: 0.96em; color: #475569; margin-top: 8px; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 18px; margin-bottom: 22px; }
+    .card { background: #ffffff; border-radius: 14px; padding: 18px 20px; box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05); }
+    .card strong { display: block; font-size: 0.88em; margin-bottom: 10px; color: #334155; }
+    .metric-value { font-size: 2rem; color: #0f4c81; margin-bottom: 6px; }
+    .label { color: #64748b; font-size: 0.94em; }
+    .table-small th, .table-small td { padding: 12px 14px; }
+    .highlight { color: #0f4c81; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <h1>Relatório Executivo</h1>
+  <p><strong>Objetivo:</strong> avaliar o desempenho do modelo XGBoost para prever o resultado de partidas de futebol em três classes: vitória visitante, empate e vitória mandante.</p>
+
+  <div class="summary">
+    <h2>Resumo Objetivo</h2>
+    <p>O pipeline treinou um modelo de classificação usando o dataset cronológico gerado a partir das bases de partidas, rankings FIFA e valores de mercado dos jogadores.</p>
+    <ul>
+      <li>Modelo: <strong>XGBClassifier</strong> com classificação multiclasse.</li>
+      <li>Tarefa: prever <strong>match_result</strong> com classes <em>away_win</em>, <em>draw</em> e <em>home_win</em>.</li>
+      <li>Divisão temporal: treino, validação e teste respeitando ordem cronológica para evitar vazamento.</li>
+      <li>Métricas de comparação incluídas: F1-macro, log-loss, balanced accuracy, precisão e recall macro.</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h2>Principais resultados</h2>
+    <div class="cards">
+      <div class="card">
+        <strong>Conjunto de Validação</strong>
+        <div class="metric-value">0.5071</div>
+        <div class="label">F1-macro</div>
+      </div>
+      <div class="card">
+        <strong>Conjunto de Teste</strong>
+        <div class="metric-value">0.5248</div>
+        <div class="label">F1-macro</div>
+      </div>
+      <div class="card">
+        <strong>Gancho vs Baseline</strong>
+        <div class="metric-value">+0.3128</div>
+        <div class="label">Delta F1-macro sobre baseline</div>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table>
+        <thead>
+          <tr>
+            <th class="metric-name">Conjunto</th>
+            <th>Accuracy</th>
+            <th>F1-macro</th>
+            <th>Log-loss</th>
+            <th>Balanced accuracy</th>
+            <th>Precision macro</th>
+            <th>Recall macro</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Validação</td>
+            <td>0.5440</td>
+            <td>0.5071</td>
+            <td>0.9353</td>
+            <td>0.5111</td>
+            <td>0.5089</td>
+            <td>0.5111</td>
+          </tr>
+          <tr>
+            <td>Teste</td>
+            <td>0.5699</td>
+            <td>0.5248</td>
+            <td>0.9035</td>
+            <td>0.5322</td>
+            <td>0.5226</td>
+            <td>0.5322</td>
+          </tr>
+          <tr>
+            <td>Baseline: sempre vitória mandante</td>
+            <td>0.4664</td>
+            <td>0.2120</td>
+            <td>—</td>
+            <td>0.3333</td>
+            <td>0.1555</td>
+            <td>0.3333</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">O modelo supera claramente o baseline de sempre prever vitória mandante em todas as métricas principais, especialmente em F1-macro e balanced accuracy.</p>
+  </div>
+
+  <div class="section">
+    <h2>Desempenho por classe</h2>
+    <div class="table-responsive">
+      <table class="table-small">
+        <thead>
+          <tr>
+            <th>Resultado (Classe)</th>
+            <th>Precisão</th>
+            <th>Recall</th>
+            <th>F1-Score</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Vitória Visitante (0)</td>
+            <td>0.54</td>
+            <td>0.66</td>
+            <td>0.60</td>
+          </tr>
+          <tr>
+            <td>Empate (1)</td>
+            <td>0.32</td>
+            <td>0.27</td>
+            <td>0.29</td>
+          </tr>
+          <tr>
+            <td>Vitória Mandante (2)</td>
+            <td>0.71</td>
+            <td>0.67</td>
+            <td>0.69</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">Essa tabela reflete os resultados reais do modelo XGBoost no conjunto de teste.</p>
+  </div>
+
+  <div class="section">
+    <h2>Matriz de Confusão</h2>
+    <div class="image-frame center">
+      <img src="ML_XGBoost_01/confusion_matrix.png" alt="Matriz de confusão" style="max-width:100%; height:auto;" />
+    </div>
+    <p>A matriz de confusão mostra como as previsões do modelo se comparam aos resultados reais no conjunto de teste.</p>
+    <p>Para cada linha:</p>
+    <ul>
+      <li><strong>linha:</strong> classe real</li>
+      <li><strong>coluna:</strong> classe prevista</li>
+    </ul>
+    <p>Interpretação:</p>
+    <ul>
+      <li>Valores na diagonal representam acertos corretos.</li>
+      <li>Valores fora da diagonal representam erros; por exemplo, partidas reais de empate previstas como vitória mandante ou visitante.</li>
+    </ul>
+    <p class="note">A imagem acima é gerada pelo script de treino e evidencia o desempenho multiclasse do modelo, permitindo identificar quais classes são mais confundidas.</p>
+  </div>
+
+  <div class="section">
+    <h2>Análise de desempenho</h2>
+    <p>O modelo apresenta melhor desempenho em classes com maior suporte, especialmente em <strong>home_win</strong> e <strong>away_win</strong>. A classe <strong>draw</strong> é a mais difícil de prever, como indica a menor precisão e recall dessa classe no relatório.</p>
+    <p>Isso é típico em classificação de resultados de futebol, onde empates ocorrem com frequência moderada e tendem a ser menos previsíveis.</p>
+  </div>
+
+  <div class="section">
+    <h2>Conclusão executiva</h2>
+    <p>O modelo XGBoost mostra performance consistente em dados de teste e validação, com métricas superiores ao baseline simples. A margem de melhoria em relação ao baseline indica que o modelo captura padrões relevantes além do viés de vitória mandante.</p>
+    <p>Recomenda-se, como próximo passo, aprofundar a análise da classe <strong>draw</strong>, avaliar calibração de probabilidade e considerar validação temporal adicional para confirmar a estabilidade em novas temporadas.</p>
+  </div>
+</body>
+</html>
