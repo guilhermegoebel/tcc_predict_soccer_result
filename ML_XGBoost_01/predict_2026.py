@@ -8,10 +8,30 @@ Pré-requisito: ter rodado train_xgboost.py antes, para gerar:
 
 Uso:
     python predict_2026.py
+
+-----------------------------------------------------------------
+CHANGELOG (melhorias sobre a versão anterior):
+1. Removida a lista DROP_COLUMNS, que não era usada em nenhum
+   lugar do script (código morto) e ainda divergia do treino,
+   podendo confundir quem for manter o código.
+2. Adicionada a flag "time visto no treino" (home_team_seen /
+   away_team_seen), na mesma lógica usada no train_xgboost.py.
+   Importante para 2026: seleções estreantes em Copa do Mundo vão
+   ser marcadas explicitamente como "não vistas", em vez de ficarem
+   escondidas atrás de uma frequência baixa igual à de um time raro.
+3. As probabilidades agora passam pela calibração (isotonic
+   regression) salva no treino, antes de ir para o CSV final —
+   ficam mais próximas da chance real, e não só da preferência do
+   modelo balanceado.
+4. Aviso de features ausentes agora mostra também quantas partidas
+   (%) ficaram com NaN em cada uma, não só o nome da coluna.
+-----------------------------------------------------------------
 """
 
+import json
 import pickle
 
+import numpy as np
 import pandas as pd
 from xgboost import XGBClassifier
 
@@ -23,17 +43,6 @@ ARTIFACTS_FILE = 'preprocessing_artifacts.pkl'
 OUTPUT_FILE = 'comparativo_real_vs_predito_2026.csv'
 
 RESULT_LABELS = {0: 'away_win', 1: 'draw', 2: 'home_win'}
-
-# Mesma lista usada no treino, para não vazar colunas indevidas
-DROP_COLUMNS = [
-    'match_id',
-    'date',
-    'home_goals',
-    'away_goals',
-    'rank_diff',
-    'points_diff',
-    'match_result',
-]
 
 TARGET_COLUMN = 'match_result'
 
@@ -48,9 +57,11 @@ model.load_model(MODEL_FILE)
 with open(ARTIFACTS_FILE, 'rb') as f:
     artifacts = pickle.load(f)
 
-combined_team_freq = artifacts['combined_team_freq']
+combined_team_freq = artifacts.get('combined_team_freq')
+known_teams = artifacts.get('known_teams')
 competition_bucket_columns = artifacts['competition_bucket_columns']
 feature_columns = artifacts['feature_columns']
+calibrators = artifacts.get('calibrators')  # pode não existir em modelos antigos
 
 
 # =============================================================
@@ -95,10 +106,35 @@ df['competition_bucket'] = df['competition'].apply(bucket_competition)
 # 4. APLICAR (NÃO REFAZER) O FREQUENCY ENCODING DO TREINO
 # =============================================================
 # Times que não existiam no treino (freq_map) recebem 0.0, igual
-# ao comportamento original em val/teste.
+# ao comportamento original em val/teste. Além disso, marcamos
+# explicitamente quais times são "novos" para o modelo — relevante
+# para seleções estreantes na Copa de 2026.
 
-df['home_team_freq'] = df['home_team'].map(combined_team_freq).fillna(0.0)
-df['away_team_freq'] = df['away_team'].map(combined_team_freq).fillna(0.0)
+if combined_team_freq is not None:
+    df['home_team_freq'] = df['home_team'].map(combined_team_freq).fillna(0.0)
+    df['away_team_freq'] = df['away_team'].map(combined_team_freq).fillna(0.0)
+
+if known_teams is not None:
+    df['home_team_seen'] = df['home_team'].isin(known_teams).astype(int)
+    df['away_team_seen'] = df['away_team'].isin(known_teams).astype(int)
+else:
+    # Modelos treinados sem frequency encoding não têm um universo de
+    # times salvo para calcular essas flags; mantém a saída compatível.
+    df['home_team_seen'] = 0
+    df['away_team_seen'] = 0
+    num_new_home = 0
+    num_new_away = 0
+
+if known_teams is not None:
+    num_new_home = (df['home_team_seen'] == 0).sum()
+    num_new_away = (df['away_team_seen'] == 0).sum()
+if num_new_home or num_new_away:
+    print(
+        f'\n[AVISO] Times não vistos no treino: '
+        f'{num_new_home} partidas com mandante novo, '
+        f'{num_new_away} partidas com visitante novo. '
+        f'Previsões para esses jogos tendem a ser menos confiáveis.'
+    )
 
 dummies = pd.get_dummies(df['competition_bucket'], prefix='comp')
 for col in competition_bucket_columns:
@@ -117,9 +153,21 @@ df[competition_bucket_columns] = dummies[competition_bucket_columns]
 missing_features = [c for c in feature_columns if c not in df.columns]
 if missing_features:
     print(f'\n[AVISO] Features ausentes na base 2026, preenchidas com NaN:')
-    print(missing_features)
     for col in missing_features:
         df[col] = float('nan')
+        print(f'  - {col}: 100.0% das partidas sem esse dado')
+
+# Para features que existem mas têm NaN espalhado (não 100% ausentes),
+# mostra a cobertura real — ajuda a perceber degradação silenciosa.
+partially_missing = [
+    c for c in feature_columns
+    if c not in missing_features and df[c].isna().any()
+]
+if partially_missing:
+    print('\n[AVISO] Features com NaN parcial na base 2026:')
+    for col in partially_missing:
+        pct = df[col].isna().mean() * 100
+        print(f'  - {col}: {pct:.1f}% das partidas sem esse dado')
 
 X = df[feature_columns]
 
@@ -129,7 +177,18 @@ X = df[feature_columns]
 # =============================================================
 
 y_pred = model.predict(X)
-y_pred_proba = model.predict_proba(X)
+y_pred_proba_raw = model.predict_proba(X)
+
+if calibrators:
+    y_pred_proba = np.zeros_like(y_pred_proba_raw)
+    for class_idx, iso in calibrators.items():
+        y_pred_proba[:, class_idx] = iso.predict(y_pred_proba_raw[:, class_idx])
+    row_sums = y_pred_proba.sum(axis=1, keepdims=True)
+    row_sums[row_sums == 0] = 1.0
+    y_pred_proba = y_pred_proba / row_sums
+else:
+    # Compatibilidade com artefatos gerados antes da calibração existir.
+    y_pred_proba = y_pred_proba_raw
 
 df['resultado_predito'] = pd.Series(y_pred).map(RESULT_LABELS)
 df['prob_away_win'] = y_pred_proba[:, 0]
@@ -159,6 +218,8 @@ output_columns += ['home_team', 'away_team']
 if 'competition' in df.columns:
     output_columns.append('competition')
 output_columns += [
+    'home_team_seen',
+    'away_team_seen',
     'resultado_real',
     'resultado_predito',
     'acertou',
@@ -176,3 +237,23 @@ print(df_out.head(10).to_string())
 if has_real_result:
     acc = df_out['acertou'].mean()
     print(f'\nAcurácia simples na base 2026: {acc:.4f}')
+    prediction_metrics = {
+        'num_matches': int(len(df_out)),
+        'has_real_result': True,
+        'accuracy': float(acc),
+        'new_home_teams': int(num_new_home),
+        'new_away_teams': int(num_new_away),
+    }
+else:
+    prediction_metrics = {
+        'num_matches': int(len(df_out)),
+        'has_real_result': False,
+        'accuracy': None,
+        'new_home_teams': int(num_new_home),
+        'new_away_teams': int(num_new_away),
+    }
+
+with open('prediction_metrics.json', 'w', encoding='utf-8') as f:
+    json.dump(prediction_metrics, f, indent=2, ensure_ascii=False)
+
+print('Métricas de predição salvas em prediction_metrics.json')

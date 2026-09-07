@@ -9,7 +9,6 @@ Este diretório reúne o pipeline de preparação de dados e treino de um classi
   - `rankings_fifa.csv`
   - `valor_mercado_jogadores.csv`
   - `paises_siglas_relacao.csv`
-- `dataset_copa2026.py`: filtra partidas envolvendo seleções classificadas para a Copa do Mundo de 2026.
 - `ML_XGBoost_01/train_xgboost.py`: treina um modelo XGBoost com split temporal e avaliação em validação/teste.
 - `ML_XGBoost_01/predict_2026.py`: aplica o modelo treinado a partidas de 2026 e gera um comparativo real vs predito.
 
@@ -78,19 +77,53 @@ A modelagem em `ML_XGBoost_01/train_xgboost.py` usa:
 - `preprocessing_artifacts.pkl`: artefatos usados para reaplicar o mesmo pré-processamento em novos dados.
 - `confusion_matrix.png`: matriz de confusão do conjunto de teste.
 - `feature_importance.png`: importância das features.
+- `evaluation_metrics.csv`: tabela com métricas de validação e teste.
+- `evaluation_metrics.json`: relatório estruturado de métricas com classificação detalhada.
+
+## Pipeline unificado
+
+- `run_pipeline.py`: executa automaticamente a geração do dataset, o treino do modelo e a predição em 2026 em sequência.
+- Use `python run_pipeline.py` para rodar todo o fluxo em um único passo.
 
 ## Saídas de predição
 
 O script `ML_XGBoost_01/predict_2026.py` produz:
 
 - `comparativo_real_vs_predito_2026.csv`: tabela com resultado real e predito para as partidas de 2026.
-- `football_matches_ml_worldcup2026.csv`: subconjunto de partidas envolvendo seleções classificadas para a Copa de 2026.
+- `prediction_metrics.json`: métricas da predição em 2026 (se o gabarito estiver presente).
+
+## Processo reprodutível
+
+### Passo a passo
+
+1. Garanta que os arquivos brutos estejam no diretório:
+   - `matches.csv`
+   - `rankings_fifa.csv`
+   - `valor_mercado_jogadores.csv`
+   - `paises_siglas_relacao.csv`
+2. Execute `python run_pipeline.py` no diretório raiz do projeto.
+3. O script fará em sequência:
+   - geração do dataset principal (`script.py`)
+   - treino do modelo XGBoost (`ML_XGBoost_01/train_xgboost.py`)
+   - predição em 2026 (`ML_XGBoost_01/predict_2026.py`)
+4. Ao final, revise os arquivos gerados:
+   - `football_matches_ml.csv`
+   - `ML_XGBoost_01/xgb_match_result.json`
+   - `ML_XGBoost_01/preprocessing_artifacts.pkl`
+   - `ML_XGBoost_01/confusion_matrix.png`
+   - `ML_XGBoost_01/feature_importance.png`
+   - `ML_XGBoost_01/evaluation_metrics.csv`
+   - `ML_XGBoost_01/evaluation_metrics.json`
+   - `ML_XGBoost_01/comparativo_real_vs_predito_2026.csv`
+   - `ML_XGBoost_01/prediction_metrics.json`
 
 ## Como usar
 
-1. Execute `script.py` para gerar o dataset principal.
-2. Execute `ML_XGBoost_01/train_xgboost.py` para treinar o modelo.
-3. Execute `ML_XGBoost_01/predict_2026.py` para gerar previsões para 2026.
+1. Execute `python run_pipeline.py` para rodar todo o pipeline.
+2. Se preferir executar etapas separadas:
+   - `python script.py`
+   - `python ML_XGBoost_01/train_xgboost.py`
+   - `python ML_XGBoost_01/predict_2026.py`
 
 ## Target do modelo
 
