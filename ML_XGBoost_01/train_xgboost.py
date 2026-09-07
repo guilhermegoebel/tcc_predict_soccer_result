@@ -8,10 +8,24 @@ Requisitos:
 
 Uso:
     python train_xgboost.py
+
+-----------------------------------------------------------------
+CHANGELOG (melhorias sobre a versão anterior):
+1. Calibração de probabilidade (isotonic regression por classe,
+   ajustada na validação). Corrige o log-loss alto causado pelo
+   sample_weight='balanced', sem mudar as previsões de classe.
+2. Flag "time visto no treino" (home_team_seen / away_team_seen).
+   Antes, um time nunca visto no treino e um time raro de verdade
+   recebiam o mesmo valor de frequência (perto de 0) — o modelo
+   não conseguia distinguir os dois casos. Agora ele consegue.
+3. Comentário de rank_diff/points_diff corrigido para refletir o
+   que o código realmente faz (mantém essas colunas como feature).
+-----------------------------------------------------------------
 """
 
 import json
 import pickle
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -28,6 +42,7 @@ from sklearn.metrics import (
     recall_score
 )
 from sklearn.utils.class_weight import compute_sample_weight
+from sklearn.isotonic import IsotonicRegression
 
 from xgboost import XGBClassifier
 
@@ -41,18 +56,104 @@ TRAIN_END_YEAR = 2021      # treino: até este ano (inclusive)
 VAL_END_YEAR = 2023        # validação (early stopping): anos seguintes
                            # teste: tudo depois de VAL_END_YEAR
 
-# Colunas que não entrar como feature (identificadores, ou redundantes)
+# Colunas que não entram como feature (identificadores, ou vazamento)
 DROP_COLUMNS = [
     'match_id',
     'date',
     'home_goals',       # vazamento: só se sabe depois do jogo
     'away_goals',       # vazamento: idem
-    #'rank_diff',        # redundante com home_rank/away_rank 
-    #'points_diff',      # redundante com home_points/away_points
     'match_result'      # é o target
 ]
+# rank_diff e points_diff são MANTIDOS como feature de propósito:
+# mesmo sendo calculados a partir de home_rank/away_rank e
+# home_points/away_points, uma diferença pré-calculada facilita o
+# XGBoost a encontrar o split relevante direto, sem precisar
+# "descobrir" a subtração através de múltiplas árvores. Não é
+# vazamento (é informação pré-jogo), então mantemos.
 
 TARGET_COLUMN = 'match_result'
+
+
+def export_summary_table(metrics_df: pd.DataFrame, output_path='resumo_executivo.png') -> Path:
+    """Exporta a tabela dos principais resultados do relatório executivo,
+    sem incluir a métrica de log-loss.
+    """
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    table_df = metrics_df[
+        ['split', 'accuracy', 'f1_macro', 'balanced_accuracy', 'precision_macro', 'recall_macro']
+    ].copy()
+    table_df.columns = ['Conjunto', 'Accuracy', 'F1-macro', 'Balanced accuracy', 'Precision macro', 'Recall macro']
+
+    fig, ax = plt.subplots(figsize=(11, max(2.7, 1.2 + len(table_df) * 0.55)))
+    ax.axis('off')
+
+    cell_text = table_df.round(4).astype(str).to_numpy()
+    table = ax.table(
+        cellText=cell_text,
+        colLabels=table_df.columns,
+        loc='center',
+        cellLoc='center',
+        colColours=['#dfeaf7'] * len(table_df.columns),
+        bbox=[0, 0, 1, 1],
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(9)
+    table.scale(1.15, 1.6)
+
+    for (row, col), cell in table.get_celld().items():
+        cell.set_linewidth(0.7)
+        cell.set_edgecolor('#b9c7d6')
+        if row == 0:
+            cell.set_facecolor('#bfcfe6')
+            cell.set_text_props(weight='bold')
+
+    fig.tight_layout()
+    fig.savefig(path, dpi=200, bbox_inches='tight')
+    plt.close(fig)
+    return path
+
+
+def export_class_performance_table(class_report_df: pd.DataFrame, output_path='desempenho_por_classe.png') -> Path:
+    """Exporta a tabela de desempenho por classe com precisão, recall e F1."""
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    table_df = class_report_df[['precision', 'recall', 'f1-score']].copy().round(2)
+    table_df.index = [
+        {'away_win': 'Vitória Visitante (0)', 'draw': 'Empate (1)', 'home_win': 'Vitória Mandante (2)'}.get(idx, idx)
+        for idx in table_df.index
+    ]
+    table_df.columns = ['Precisão', 'Recall', 'F1-score']
+
+    fig, ax = plt.subplots(figsize=(8, max(2.8, 1.2 + len(table_df) * 0.7)))
+    ax.axis('off')
+
+    table = ax.table(
+        cellText=table_df.to_numpy(),
+        colLabels=table_df.columns,
+        rowLabels=table_df.index,
+        loc='center',
+        cellLoc='center',
+        colColours=['#dfeaf7'] * len(table_df.columns),
+        bbox=[0, 0, 1, 1],
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(10)
+    table.scale(1.1, 1.5)
+
+    for (row, col), cell in table.get_celld().items():
+        cell.set_linewidth(0.7)
+        cell.set_edgecolor('#b9c7d6')
+        if row == 0:
+            cell.set_facecolor('#bfcfe6')
+            cell.set_text_props(weight='bold')
+
+    fig.tight_layout()
+    fig.savefig(path, dpi=200, bbox_inches='tight')
+    plt.close(fig)
+    return path
 
 
 # =============================================================
@@ -164,13 +265,33 @@ combined_team_freq = fit_frequency_encoding(
     'team'
 )
 
+# Conjunto de times conhecidos no treino, para a flag "seen".
+known_teams = set(combined_team_freq.keys())
+
+
+def add_team_features(df_in, freq_map, known_set):
+    """
+    Adiciona frequência de time + flag binária indicando se o time
+    já apareceu no treino. A flag existe porque um time nunca visto
+    e um time raro de verdade (mas visto) recebiam o mesmo valor de
+    frequência (perto de 0) — o modelo não conseguia diferenciar
+    "raro" de "desconhecido". Isso é especialmente importante para
+    aplicar o modelo em 2026, quando seleções estreantes em Copas do
+    Mundo (sem histórico no treino) vão aparecer na base.
+    """
+    df_in['home_team_freq'] = apply_frequency_encoding(
+        df_in, 'home_team', freq_map
+    )
+    df_in['away_team_freq'] = apply_frequency_encoding(
+        df_in, 'away_team', freq_map
+    )
+    df_in['home_team_seen'] = df_in['home_team'].isin(known_set).astype(int)
+    df_in['away_team_seen'] = df_in['away_team'].isin(known_set).astype(int)
+    return df_in
+
+
 for split_df in (df_train, df_val, df_test):
-    split_df['home_team_freq'] = apply_frequency_encoding(
-        split_df, 'home_team', combined_team_freq
-    )
-    split_df['away_team_freq'] = apply_frequency_encoding(
-        split_df, 'away_team', combined_team_freq
-    )
+    add_team_features(split_df, combined_team_freq, known_teams)
 
 competition_bucket_dummies_train = pd.get_dummies(
     df_train['competition_bucket'], prefix='comp'
@@ -225,6 +346,10 @@ y_test = df_test[TARGET_COLUMN]
 # =============================================================
 # 'balanced' pondera cada classe pelo inverso da sua frequência no
 # treino, sem alterar os dados em si (alternativa ao oversampling).
+# Efeito colateral conhecido: melhora F1-macro, mas distorce as
+# probabilidades (o modelo passa a "achar" empate mais provável do
+# que é na realidade). Corrigimos isso na etapa 8b (calibração),
+# sem mudar a decisão de classe aqui.
 
 sample_weight = compute_sample_weight(
     class_weight='balanced',
@@ -264,34 +389,70 @@ print(f'\nMelhor iteração (early stopping): {model.best_iteration}')
 
 
 # =============================================================
-# 8. AVALIAÇÃO NA VALIDAÇÃO E NO TESTE
+# 8. AVALIAÇÃO NA VALIDAÇÃO E NO TESTE (previsões de classe)
 # =============================================================
 
 y_val_pred = model.predict(X_val)
-y_val_pred_proba = model.predict_proba(X_val)
+y_val_pred_proba_raw = model.predict_proba(X_val)
 
 y_pred = model.predict(X_test)
-y_pred_proba = model.predict_proba(X_test)
+y_pred_proba_raw = model.predict_proba(X_test)
 
 val_f1_macro = f1_score(y_val, y_val_pred, average='macro')
-val_log_loss = log_loss(y_val, y_val_pred_proba, labels=[0, 1, 2])
 val_balanced_accuracy = balanced_accuracy_score(y_val, y_val_pred)
 val_precision_macro = precision_score(y_val, y_val_pred, average='macro', zero_division=0)
 val_recall_macro = recall_score(y_val, y_val_pred, average='macro', zero_division=0)
 val_accuracy = (y_val == y_val_pred).mean()
 
 test_f1_macro = f1_score(y_test, y_pred, average='macro')
-test_log_loss = log_loss(y_test, y_pred_proba, labels=[0, 1, 2])
 test_balanced_accuracy = balanced_accuracy_score(y_test, y_pred)
 test_precision_macro = precision_score(y_test, y_pred, average='macro', zero_division=0)
 test_recall_macro = recall_score(y_test, y_pred, average='macro', zero_division=0)
 test_accuracy = (y_test == y_pred).mean()
 
+
+# =============================================================
+# 8b. CALIBRAÇÃO DE PROBABILIDADE (isotonic regression por classe)
+# =============================================================
+# O treino usou sample_weight='balanced', o que ajuda a classificar
+# melhor mas deixa as probabilidades "erradas" (log-loss alto).
+# Aqui ajustamos uma regressão isotônica por classe, usando SÓ o
+# conjunto de validação, para reescalar a probabilidade bruta do
+# modelo para a probabilidade real observada. A classe prevista
+# (y_pred, usada no F1/accuracy acima) não muda — só as probabi-
+# lidades que vão para o CSV final ficam mais confiáveis.
+
+calibrators = {}
+for class_idx in [0, 1, 2]:
+    iso = IsotonicRegression(out_of_bounds='clip')
+    iso.fit(y_val_pred_proba_raw[:, class_idx], (y_val == class_idx).astype(int))
+    calibrators[class_idx] = iso
+
+
+def calibrate_proba(proba_raw, calibrators_dict):
+    calibrated = np.zeros_like(proba_raw)
+    for class_idx, iso in calibrators_dict.items():
+        calibrated[:, class_idx] = iso.predict(proba_raw[:, class_idx])
+    # Renormaliza cada linha para somar 1 (a calibração por classe,
+    # feita separadamente, não garante isso sozinha).
+    row_sums = calibrated.sum(axis=1, keepdims=True)
+    row_sums[row_sums == 0] = 1.0  # evita divisão por zero
+    return calibrated / row_sums
+
+
+y_val_pred_proba = calibrate_proba(y_val_pred_proba_raw, calibrators)
+y_pred_proba = calibrate_proba(y_pred_proba_raw, calibrators)
+
+val_log_loss_raw = log_loss(y_val, y_val_pred_proba_raw, labels=[0, 1, 2])
+val_log_loss = log_loss(y_val, y_val_pred_proba, labels=[0, 1, 2])
+test_log_loss_raw = log_loss(y_test, y_pred_proba_raw, labels=[0, 1, 2])
+test_log_loss = log_loss(y_test, y_pred_proba, labels=[0, 1, 2])
+
 print('\n===================================')
 print('RESULTADOS NO CONJUNTO DE VALIDAÇÃO')
 print('===================================')
 print(f'F1-macro: {val_f1_macro:.4f}')
-print(f'Log-loss: {val_log_loss:.4f}')
+print(f'Log-loss (bruto / calibrado): {val_log_loss_raw:.4f} / {val_log_loss:.4f}')
 print(f'Balanced accuracy: {val_balanced_accuracy:.4f}')
 print(f'Precision macro: {val_precision_macro:.4f}')
 print(f'Recall macro: {val_recall_macro:.4f}')
@@ -301,7 +462,7 @@ print('\n===================================')
 print('RESULTADOS NO CONJUNTO DE TESTE')
 print('===================================')
 print(f'F1-macro: {test_f1_macro:.4f}')
-print(f'Log-loss: {test_log_loss:.4f}')
+print(f'Log-loss (bruto / calibrado): {test_log_loss_raw:.4f} / {test_log_loss:.4f}')
 print(f'Balanced accuracy: {test_balanced_accuracy:.4f}')
 print(f'Precision macro: {test_precision_macro:.4f}')
 print(f'Recall macro: {test_recall_macro:.4f}')
@@ -330,7 +491,7 @@ print(
 )
 
 # =============================================================
-# 8b. RELATÓRIO DE MÉTRICAS
+# 8c. RELATÓRIO DE MÉTRICAS
 # =============================================================
 
 evaluation_metrics = {
@@ -339,7 +500,8 @@ evaluation_metrics = {
         'num_samples': int(len(y_val)),
         'accuracy': float(val_accuracy),
         'f1_macro': float(val_f1_macro),
-        'log_loss': float(val_log_loss),
+        'log_loss_raw': float(val_log_loss_raw),
+        'log_loss_calibrated': float(val_log_loss),
         'balanced_accuracy': float(val_balanced_accuracy),
         'precision_macro': float(val_precision_macro),
         'recall_macro': float(val_recall_macro),
@@ -355,7 +517,8 @@ evaluation_metrics = {
         'num_samples': int(len(y_test)),
         'accuracy': float(test_accuracy),
         'f1_macro': float(test_f1_macro),
-        'log_loss': float(test_log_loss),
+        'log_loss_raw': float(test_log_loss_raw),
+        'log_loss_calibrated': float(test_log_loss),
         'balanced_accuracy': float(test_balanced_accuracy),
         'precision_macro': float(test_precision_macro),
         'recall_macro': float(test_recall_macro),
@@ -371,7 +534,8 @@ evaluation_metrics = {
         'num_samples': int(len(y_test)),
         'accuracy': float(baseline_accuracy),
         'f1_macro': float(baseline_f1),
-        'log_loss': None,
+        'log_loss_raw': None,
+        'log_loss_calibrated': None,
         'balanced_accuracy': float(baseline_balanced_accuracy),
         'precision_macro': float(baseline_precision_macro),
         'recall_macro': float(baseline_recall_macro),
@@ -388,7 +552,8 @@ metrics_df = pd.DataFrame([
         'num_samples': row['num_samples'],
         'accuracy': row['accuracy'],
         'f1_macro': row['f1_macro'],
-        'log_loss': row['log_loss'],
+        'log_loss_raw': row['log_loss_raw'],
+        'log_loss_calibrated': row['log_loss_calibrated'],
         'balanced_accuracy': row['balanced_accuracy'],
         'precision_macro': row['precision_macro'],
         'recall_macro': row['recall_macro']
@@ -399,6 +564,14 @@ metrics_df = pd.DataFrame([
 metrics_df.to_csv('evaluation_metrics.csv', index=False)
 print('\nRelatório de métricas salvo em evaluation_metrics.csv')
 print('Relatório de métricas estruturado salvo em evaluation_metrics.json')
+
+summary_table_path = export_summary_table(metrics_df, 'resumo_executivo.png')
+print(f'Tabela principal do relatório executivo salva em {summary_table_path}')
+
+class_report_df = pd.DataFrame(evaluation_metrics['test']['classification_report']).T
+class_report_df = class_report_df.loc[['away_win', 'draw', 'home_win'], ['precision', 'recall', 'f1-score']].copy()
+class_table_path = export_class_performance_table(class_report_df, 'desempenho_por_classe.png')
+print(f'Tabela de desempenho por classe salva em {class_table_path}')
 
 
 # =============================================================
@@ -440,19 +613,22 @@ print(importances.head(15).round(4).to_string())
 
 
 # =============================================================
-# 11. SALVAR MODELO
+# 11. SALVAR MODELO E ARTEFATOS
 # =============================================================
 
 model.save_model('xgb_match_result.json')
 print('\nModelo salvo em xgb_match_result.json')
 
-# Artefatos de pré-processamento: precisam ser reaplicados exatamente
-# assim (sem "refit") em qualquer dataset novo (ex.: temporada 2026)
-# para as features baterem com o que o modelo aprendeu.
+# Artefatos de pré-processamento + calibração: precisam ser
+# reaplicados exatamente assim (sem "refit") em qualquer dataset
+# novo (ex.: temporada 2026) para as features e probabilidades
+# baterem com o que o modelo aprendeu.
 preprocessing_artifacts = {
     'combined_team_freq': combined_team_freq,
+    'known_teams': known_teams,
     'competition_bucket_columns': competition_bucket_columns,
     'feature_columns': feature_columns,
+    'calibrators': calibrators,
 }
 
 with open('preprocessing_artifacts.pkl', 'wb') as f:

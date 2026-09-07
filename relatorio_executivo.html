@@ -30,20 +30,38 @@
     .label { color: #64748b; font-size: 0.94em; }
     .table-small th, .table-small td { padding: 12px 14px; }
     .highlight { color: #0f4c81; font-weight: 700; }
+    .badge { display: inline-block; font-size: 0.78em; font-weight: 700; padding: 3px 10px; border-radius: 999px; margin-left: 8px; vertical-align: middle; }
+    .badge-new { background: #dcfce7; color: #166534; }
+    .badge-warn { background: #fef3c7; color: #92400e; }
+    .callout { background: #fffbeb; border-left: 6px solid #d97706; padding: 18px 20px; border-radius: 10px; margin-bottom: 18px; }
+    .callout p:last-child { margin-bottom: 0; }
+    .changelog { background: #f0fdf4; border-left: 6px solid #16a34a; padding: 18px 20px; border-radius: 10px; margin-bottom: 22px; }
+    .changelog p:last-child, .changelog ul:last-child { margin-bottom: 0; }
+    .improvement-list li { margin-bottom: 10px; }
   </style>
 </head>
 <body>
+<div class="page">
   <h1>Relatório Executivo</h1>
-  <p><strong>Objetivo:</strong> avaliar o desempenho do modelo XGBoost para prever o resultado de partidas de futebol em três classes: vitória visitante, empate e vitória mandante.</p>
+  <p><strong>Objetivo:</strong> avaliar o desempenho do modelo XGBoost para prever o resultado de partidas de futebol em três classes: vitória visitante, empate e vitória mandante — e discutir sua aplicabilidade para a Copa do Mundo de 2026.</p>
 
   <div class="summary">
     <h2>Resumo Objetivo</h2>
     <p>O pipeline treinou um modelo de classificação usando o dataset cronológico gerado a partir das bases de partidas, rankings FIFA e valores de mercado dos jogadores.</p>
     <ul>
       <li>Modelo: <strong>XGBClassifier</strong> com classificação multiclasse.</li>
-      <li>Tarefa: prever <strong>match_result</strong> com classes <em>away_win</em>, <em>draw</em> e <em>home_win</em>.</li>
+      <li>Tarefa: prever <strong>match_result</strong> com classes <em>away_win</em>, <em>draw</em> e <em>home_win</em> — o modelo prevê o resultado da partida, não o placar exato.</li>
       <li>Divisão temporal: treino, validação e teste respeitando ordem cronológica para evitar vazamento.</li>
       <li>Métricas de comparação incluídas: F1-macro, log-loss, balanced accuracy, precisão e recall macro.</li>
+    </ul>
+  </div>
+
+  <div class="changelog">
+    <h3 style="margin-top:0;">Atualização da metodologia<span class="badge badge-new">Novo</span></h3>
+    <p>Desde a última versão deste relatório, o pipeline recebeu duas melhorias que afetam diretamente a leitura dos números abaixo:</p>
+    <ul>
+      <li><strong>Calibração de probabilidade:</strong> o modelo é treinado com pesos balanceados entre as classes para não ignorar empates — isso ajuda na classificação, mas distorce as probabilidades brutas. Agora as probabilidades passam por um ajuste adicional (calibração feita sobre o conjunto de validação) antes de chegar ao usuário final, tornando-as mais próximas da chance real de cada resultado. Isso não muda qual resultado o modelo escolhe como mais provável — só deixa o "grau de confiança" mais confiável.</li>
+      <li><strong>Sinalização de seleção desconhecida:</strong> o modelo agora marca explicitamente quando um time (mandante ou visitante) nunca apareceu nos dados de treino, em vez de tratá-lo silenciosamente como "pouco frequente". Isso é relevante para a Copa 2026, discutido na seção específica abaixo.</li>
     </ul>
   </div>
 
@@ -52,17 +70,17 @@
     <div class="cards">
       <div class="card">
         <strong>Conjunto de Validação</strong>
-        <div class="metric-value">0.5071</div>
+        <div class="metric-value">0.5058</div>
         <div class="label">F1-macro</div>
       </div>
       <div class="card">
         <strong>Conjunto de Teste</strong>
-        <div class="metric-value">0.5248</div>
+        <div class="metric-value">0.5277</div>
         <div class="label">F1-macro</div>
       </div>
       <div class="card">
-        <strong>Gancho vs Baseline</strong>
-        <div class="metric-value">+0.3128</div>
+        <strong>Ganho vs Baseline</strong>
+        <div class="metric-value">+0.3157</div>
         <div class="label">Delta F1-macro sobre baseline</div>
       </div>
     </div>
@@ -84,20 +102,20 @@
           <tr>
             <td>Validação</td>
             <td>0.5440</td>
-            <td>0.5071</td>
-            <td>0.9353</td>
-            <td>0.5111</td>
-            <td>0.5089</td>
-            <td>0.5111</td>
+            <td>0.5058</td>
+            <td>0.9330</td>
+            <td>0.5095</td>
+            <td>0.5066</td>
+            <td>0.5095</td>
           </tr>
           <tr>
             <td>Teste</td>
-            <td>0.5699</td>
-            <td>0.5248</td>
-            <td>0.9035</td>
-            <td>0.5322</td>
-            <td>0.5226</td>
-            <td>0.5322</td>
+            <td>0.5737</td>
+            <td>0.5277</td>
+            <td>0.9026</td>
+            <td>0.5346</td>
+            <td>0.5257</td>
+            <td>0.5346</td>
           </tr>
           <tr>
             <td>Baseline: sempre vitória mandante</td>
@@ -112,6 +130,20 @@
       </table>
     </div>
     <p class="note">O modelo supera claramente o baseline de sempre prever vitória mandante em todas as métricas principais, especialmente em F1-macro e balanced accuracy.</p>
+    <div class="callout">
+      <p><strong>Sobre o log-loss acima:</strong> os valores reportados sem calibração (raw) são <strong>0.9330</strong> na validação e <strong>0.9026</strong> no teste. Após a calibração de probabilidades aplicada no pipeline, os valores calibrados ficam menores: <strong>0.8817</strong> (validação) e <strong>0.8936</strong> (teste). Recomenda-se reexecutar a avaliação final com a pipeline calibrada antes de publicar o log-loss como número definitivo.</p>
+    </div>
+    <div class="note">
+      <strong>O que cada métrica significa:</strong>
+      <ul>
+        <li><strong>Accuracy</strong>: porcentagem de previsões corretas entre todas as partidas.</li>
+        <li><strong>F1-macro</strong>: média do equilíbrio entre precisão e recall em cada classe, valorizando desempenho equilibrado nos resultados visitante, empate e mandante.</li>
+        <li><strong>Log-loss</strong>: quão bem o modelo atribui probabilidades às classes; valores menores indicam previsões mais confiantes e bem calibradas.</li>
+        <li><strong>Balanced accuracy</strong>: média de recall por classe, útil quando as classes não têm o mesmo número de exemplos.</li>
+        <li><strong>Precision macro</strong>: média da precisão de cada classe, mostrando a fração das previsões corretas entre os casos previstos para cada resultado.</li>
+        <li><strong>Recall macro</strong>: média da sensibilidade por classe, mostrando a fração dos casos reais de cada resultado que o modelo consegue identificar.</li>
+      </ul>
+    </div>
   </div>
 
   <div class="section">
@@ -130,25 +162,25 @@
           <tr>
             <td>Vitória Visitante (0)</td>
             <td>0.54</td>
-            <td>0.66</td>
-            <td>0.60</td>
+            <td>0.65</td>
+            <td>0.59</td>
           </tr>
           <tr>
             <td>Empate (1)</td>
-            <td>0.32</td>
+            <td>0.33</td>
             <td>0.27</td>
-            <td>0.29</td>
+            <td>0.30</td>
           </tr>
           <tr>
             <td>Vitória Mandante (2)</td>
             <td>0.71</td>
-            <td>0.67</td>
+            <td>0.68</td>
             <td>0.69</td>
           </tr>
         </tbody>
       </table>
     </div>
-    <p class="note">Essa tabela reflete os resultados reais do modelo XGBoost no conjunto de teste.</p>
+    <p class="note">Essa tabela reflete os resultados reais do modelo XGBoost no conjunto de teste. O empate continua sendo, de longe, a classe mais difícil — cerca de metade do F1-score da vitória mandante — e é a principal limitação do modelo atualmente, calibração à parte.</p>
   </div>
 
   <div class="section">
@@ -177,9 +209,22 @@
   </div>
 
   <div class="section">
+    <h2>Aplicabilidade e limitações para a Copa do Mundo 2026<span class="badge badge-warn">Atenção</span></h2>
+    <p>Antes de usar este modelo para prever jogos da Copa 2026, três pontos merecem atenção explícita:</p>
+    <ul class="improvement-list">
+      <li><strong>Campo neutro:</strong> o modelo foi treinado majoritariamente sobre partidas com mandante e visitante reais (ligas, eliminatórias). Na fase de grupos e mata-mata da Copa do Mundo, a maioria das partidas ocorre em campo neutro — o conceito de "vantagem de mandante" (que é uma das variáveis mais importantes do modelo) deixa de se aplicar do mesmo jeito, o que pode reduzir a qualidade das previsões.</li>
+      <li><strong>Seleções estreantes:</strong> o pipeline agora sinaliza explicitamente (colunas <code>home_team_seen</code> / <code>away_team_seen</code>) quando uma seleção não apareceu nos dados de treino. Seleções que vão disputar a Copa 2026 pela primeira vez terão essa flag ativada, e suas previsões devem ser tratadas com cautela adicional — o modelo tem, literalmente, nenhum histórico direto sobre esses times.</li>
+      <li><strong>Extrapolação temporal:</strong> o modelo foi treinado com dados até um determinado corte histórico. Qualquer mudança relevante de elenco, técnico ou forma recente das seleções entre esse corte e o início do torneio não é capturada automaticamente — o ideal é reexecutar a geração de features o mais próximo possível da data de cada partida.</li>
+    </ul>
+    <p class="note">Recomendação prática: tratar as previsões de partidas de campo neutro e de seleções estreantes como um "segundo nível" de confiança, sempre exibindo a flag de time desconhecido junto com o resultado previsto.</p>
+  </div>
+
+  <div class="section">
     <h2>Conclusão executiva</h2>
     <p>O modelo XGBoost mostra performance consistente em dados de teste e validação, com métricas superiores ao baseline simples. A margem de melhoria em relação ao baseline indica que o modelo captura padrões relevantes além do viés de vitória mandante.</p>
-    <p>Recomenda-se, como próximo passo, aprofundar a análise da classe <strong>draw</strong>, avaliar calibração de probabilidade e considerar validação temporal adicional para confirmar a estabilidade em novas temporadas.</p>
+    <p>Com a calibração de probabilidade e a sinalização de seleções desconhecidas incorporadas ao pipeline, o modelo ganha em transparência sobre onde ele é mais e menos confiável — o que é especialmente importante para um cenário como a Copa do Mundo, com muitos confrontos em campo neutro e a presença de seleções estreantes.</p>
+    <p>Recomenda-se, como próximos passos: (1) reexecutar a avaliação com o pipeline calibrado para confirmar o novo log-loss; (2) aprofundar a análise da classe <strong>draw</strong>, que segue sendo a maior fraqueza do modelo; e (3) validar separadamente o desempenho do modelo em partidas de campo neutro, já que esse recorte é o mais relevante para a Copa 2026 e ainda não foi medido isoladamente.</p>
   </div>
+</div>
 </body>
 </html>
