@@ -29,9 +29,9 @@ REQUIRED_PACKAGES = [
 ]
 
 STEPS = [
-    ('Gerar dataset principal', [sys.executable, SCRIPT_PATH]),
-    ('Treinar modelo XGBoost', [sys.executable, TRAIN_PATH]),
-    ('Rodar predição em 2026', [sys.executable, PREDICT_PATH]),
+    ('Gerar dataset principal', [sys.executable, SCRIPT_PATH], ROOT),
+    ('Treinar modelo XGBoost', [sys.executable, TRAIN_PATH], os.path.dirname(TRAIN_PATH)),
+    ('Rodar predição em 2026', [sys.executable, PREDICT_PATH], os.path.dirname(PREDICT_PATH)),
 ]
 
 OUTPUTS = [
@@ -65,11 +65,11 @@ def check_dependencies():
         sys.exit(1)
 
 
-def run_step(name, command):
+def run_step(name, command, cwd):
     print('\n' + '=' * 80)
     print(f'START: {name}')
     print('=' * 80)
-    result = subprocess.run(command, cwd=ROOT)
+    result = subprocess.run(command, cwd=cwd)
     if result.returncode != 0:
         raise RuntimeError(f'Etapa falhou: {name} (exit {result.returncode})')
     print(f'OK: {name}')
@@ -80,8 +80,8 @@ def main():
     print('Pipeline unificado de XGBoost para previsão de resultados de partidas')
     print('Executando as etapas em sequência...\n')
 
-    for name, command in STEPS:
-        run_step(name, command)
+    for name, command, cwd in STEPS:
+        run_step(name, command, cwd)
 
     print('\nPipeline concluído com sucesso!')
     print('Arquivos gerados:')

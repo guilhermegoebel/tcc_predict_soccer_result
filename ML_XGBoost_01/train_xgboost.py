@@ -48,7 +48,7 @@ from xgboost import XGBClassifier
 
 # =============================================================
 
-INPUT_FILE = 'football_matches_ml.csv'
+INPUT_FILE = '../football_matches_ml.csv'
 
 # Split temporal: nunca aleatório, porque features como h2h_* e
 # recent_* dependem do histórico acumulado cronologicamente.
@@ -309,6 +309,10 @@ for split_df in (df_train, df_val, df_test):
             dummies[col] = 0
     split_df[competition_bucket_columns] = dummies[competition_bucket_columns]
 """
+
+# O modelo atual não usa frequency encoding nem as dummies de competition.
+# Mantém o contrato do artefato explícito para a etapa de inferência.
+competition_bucket_columns = []
 
 # =============================================================
 # 5. MONTAR X / y
@@ -628,8 +632,8 @@ print('\nModelo salvo em xgb_match_result.json')
 # novo (ex.: temporada 2026) para as features e probabilidades
 # baterem com o que o modelo aprendeu.
 preprocessing_artifacts = {
-    'combined_team_freq': combined_team_freq,
-    'known_teams': known_teams,
+    #'combined_team_freq': combined_team_freq,
+    #'known_teams': known_teams,
     'competition_bucket_columns': competition_bucket_columns,
     'feature_columns': feature_columns,
     'calibrators': calibrators,

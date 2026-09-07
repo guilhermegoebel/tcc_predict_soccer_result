@@ -57,8 +57,8 @@ model.load_model(MODEL_FILE)
 with open(ARTIFACTS_FILE, 'rb') as f:
     artifacts = pickle.load(f)
 
-combined_team_freq = artifacts['combined_team_freq']
-known_teams = artifacts.get('known_teams', set(combined_team_freq.keys()))
+combined_team_freq = artifacts.get('combined_team_freq')
+known_teams = artifacts.get('known_teams')
 competition_bucket_columns = artifacts['competition_bucket_columns']
 feature_columns = artifacts['feature_columns']
 calibrators = artifacts.get('calibrators')  # pode não existir em modelos antigos
@@ -110,13 +110,24 @@ df['competition_bucket'] = df['competition'].apply(bucket_competition)
 # explicitamente quais times são "novos" para o modelo — relevante
 # para seleções estreantes na Copa de 2026.
 
-df['home_team_freq'] = df['home_team'].map(combined_team_freq).fillna(0.0)
-df['away_team_freq'] = df['away_team'].map(combined_team_freq).fillna(0.0)
-df['home_team_seen'] = df['home_team'].isin(known_teams).astype(int)
-df['away_team_seen'] = df['away_team'].isin(known_teams).astype(int)
+if combined_team_freq is not None:
+    df['home_team_freq'] = df['home_team'].map(combined_team_freq).fillna(0.0)
+    df['away_team_freq'] = df['away_team'].map(combined_team_freq).fillna(0.0)
 
-num_new_home = (df['home_team_seen'] == 0).sum()
-num_new_away = (df['away_team_seen'] == 0).sum()
+if known_teams is not None:
+    df['home_team_seen'] = df['home_team'].isin(known_teams).astype(int)
+    df['away_team_seen'] = df['away_team'].isin(known_teams).astype(int)
+else:
+    # Modelos treinados sem frequency encoding não têm um universo de
+    # times salvo para calcular essas flags; mantém a saída compatível.
+    df['home_team_seen'] = 0
+    df['away_team_seen'] = 0
+    num_new_home = 0
+    num_new_away = 0
+
+if known_teams is not None:
+    num_new_home = (df['home_team_seen'] == 0).sum()
+    num_new_away = (df['away_team_seen'] == 0).sum()
 if num_new_home or num_new_away:
     print(
         f'\n[AVISO] Times não vistos no treino: '
