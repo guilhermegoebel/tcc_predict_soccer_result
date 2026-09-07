@@ -242,7 +242,7 @@ if len(df_val) == 0 or len(df_test) == 0:
 # treino e depois aplicadas em val/teste. Times nunca vistos no
 # treino recebem 0 (tratado como faixa "raro/desconhecido").
 
-def fit_frequency_encoding(train_df, column):
+""" def fit_frequency_encoding(train_df, column):
     freq = train_df[column].value_counts(normalize=True)
     return freq.to_dict()
 
@@ -251,8 +251,9 @@ def apply_frequency_encoding(df_in, column, freq_map):
     return df_in[column].map(freq_map).fillna(0.0)
 
 
-home_team_freq = fit_frequency_encoding(df_train, 'home_team')
-away_team_freq = fit_frequency_encoding(df_train, 'away_team')
+#home_team_freq = fit_frequency_encoding(df_train, 'home_team')
+#away_team_freq = fit_frequency_encoding(df_train, 'away_team')
+
 
 # Times mandante e visitante compartilham o mesmo "universo" de
 # seleções, então combinamos as duas colunas para um mapa único de
@@ -270,15 +271,14 @@ known_teams = set(combined_team_freq.keys())
 
 
 def add_team_features(df_in, freq_map, known_set):
-    """
-    Adiciona frequência de time + flag binária indicando se o time
-    já apareceu no treino. A flag existe porque um time nunca visto
-    e um time raro de verdade (mas visto) recebiam o mesmo valor de
-    frequência (perto de 0) — o modelo não conseguia diferenciar
-    "raro" de "desconhecido". Isso é especialmente importante para
-    aplicar o modelo em 2026, quando seleções estreantes em Copas do
-    Mundo (sem histórico no treino) vão aparecer na base.
-    """
+    #Adiciona frequência de time + flag binária indicando se o time
+    #já apareceu no treino. A flag existe porque um time nunca visto
+    #e um time raro de verdade (mas visto) recebiam o mesmo valor de
+    #frequência (perto de 0) — o modelo não conseguia diferenciar
+    #"raro" de "desconhecido". Isso é especialmente importante para
+    #aplicar o modelo em 2026, quando seleções estreantes em Copas do
+    #Mundo (sem histórico no treino) vão aparecer na base.
+
     df_in['home_team_freq'] = apply_frequency_encoding(
         df_in, 'home_team', freq_map
     )
@@ -289,9 +289,9 @@ def add_team_features(df_in, freq_map, known_set):
     df_in['away_team_seen'] = df_in['away_team'].isin(known_set).astype(int)
     return df_in
 
-
 for split_df in (df_train, df_val, df_test):
     add_team_features(split_df, combined_team_freq, known_teams)
+
 
 competition_bucket_dummies_train = pd.get_dummies(
     df_train['competition_bucket'], prefix='comp'
@@ -308,7 +308,7 @@ for split_df in (df_train, df_val, df_test):
         if col not in dummies.columns:
             dummies[col] = 0
     split_df[competition_bucket_columns] = dummies[competition_bucket_columns]
-
+"""
 
 # =============================================================
 # 5. MONTAR X / y
@@ -321,7 +321,11 @@ existing_drop_columns = [
 feature_columns = [
     col for col in df_train.columns
     if col not in existing_drop_columns
-    and col not in ['home_team', 'away_team', 'competition', 'competition_bucket']
+    and col not in ['home_team', 'away_team', 'competition', 'competition_bucket',
+                    'home_team_freq',
+                    'away_team_freq',
+                    'home_team_seen',
+                    'away_team_seen']
 ]
 
 print(f'\nFeatures usadas ({len(feature_columns)}):')
