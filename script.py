@@ -48,7 +48,6 @@ debug_stats = {
     'ranking_before_date_not_found': 0,
     'market_player_not_found': 0,
     'market_value_not_found': 0,
-    'market_value_fallback_nearest': 0,
     'market_incomplete_5_players': 0,
     'missing_player_list': 0,
     'unmapped_fifa_codes': 0
@@ -678,15 +677,21 @@ def pick_market_value(player_history, match_date):
     player_history: lista de tuplas (data, valor) ordenada por data
     crescente para um jogador.
 
-    Retorna (valor, data_usada, é_anterior_ou_igual):
-    - Preferência: o valor mais recente com data <= match_date.
-    - Caso não exista nenhum valor anterior/igual à data da partida,
-      usa o valor mais próximo disponível (o primeiro registro
-      seguinte cronologicamente, já que a lista está ordenada).
+    Retorna (valor, data_usada, encontrado):
+    - Usa exclusivamente o valor mais recente com data <= match_date
+      (o registro de mercado mais próximo, mas nunca posterior à
+      partida).
+    - Caso não exista nenhum valor com data <= match_date, NÃO há
+      fallback para datas futuras (isso seria data leakage: o valor
+      de mercado de um jogador após a partida pode já refletir o
+      próprio desempenho/resultado que estamos tentando prever).
+      Nesse caso o jogador é tratado como "sem valor de mercado
+      conhecido até a data" e a função retorna (None, None, False),
+      cabendo ao chamador decidir o tratamento (ex.: pular o jogador,
+      contar como ausente na média do time, etc).
     """
 
     best_before = None
-    best_after = None
 
     for m_date, value in player_history:
 
@@ -697,14 +702,12 @@ def pick_market_value(player_history, match_date):
             best_before = (m_date, value)
 
         else:
-            best_after = (m_date, value)
+            # Lista ordenada por data crescente: assim que passarmos
+            # da match_date, não há mais nada útil adiante.
             break
 
     if best_before is not None:
         return best_before[1], best_before[0], True
-
-    if best_after is not None:
-        return best_after[1], best_after[0], False
 
     return None, None, False
 
@@ -790,41 +793,42 @@ def get_market_value_average(players, match_date, team_label=None):
 
             continue
 
-        value, used_date, is_before_or_equal = pick_market_value(
+        value, used_date, found = pick_market_value(
             player_history,
             match_date
         )
 
-        if value is None:
+        if not found:
 
-            # Não deveria ocorrer já que player_history não está vazio,
-            # mas mantemos por segurança.
+            # Jogador tem histórico de valor de mercado, mas nenhum
+            # registro com data <= match_date (só existem valores
+            # futuros). Não usamos fallback futuro (data leakage),
+            # então este jogador conta como "sem valor conhecido até
+            # a data" e é descartado da média.
             debug_stats[
                 'market_value_not_found'
             ] += 1
 
+            if SHOW_PLAYER_MATCHING:
+
+                print(
+                    f'  "{player}" -> "{player_key}" '
+                    f'=> encontrado no cache, mas SEM valor até '
+                    f'{match_date.date()} (só há registros futuros) '
+                    f'=> descartado (evita data leakage)'
+                )
+
             continue
-
-        if not is_before_or_equal:
-
-            debug_stats[
-                'market_value_fallback_nearest'
-            ] += 1
 
         sum_value += float(value)
         found_count += 1
 
         if SHOW_PLAYER_MATCHING:
 
-            tag = (
-                'valor na data/anterior'
-                if is_before_or_equal
-                else 'SEM valor anterior -> usando o mais próximo (fallback)'
-            )
-
             print(
                 f'  "{player}" -> "{player_key}" '
-                f'=> encontrado ({tag}, referência: {used_date.date()})! '
+                f'=> encontrado (valor na data/anterior, '
+                f'referência: {used_date.date()})! '
                 f'valor = €{value:,.0f}  '
                 f'[{found_count}/{MAX_PLAYERS_PER_TEAM}]'
             )
