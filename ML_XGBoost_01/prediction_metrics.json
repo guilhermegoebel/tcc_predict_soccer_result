@@ -1,7 +1,43 @@
 {
+  "model": "XGBoost",
+  "year": 2026,
   "num_matches": 104,
   "has_real_result": true,
-  "accuracy": 0.6730769230769231,
-  "new_home_teams": 0,
-  "new_away_teams": 0
+  "accuracy": 0.6634615384615384,
+  "f1_macro": 0.5105902995362828,
+  "balanced_accuracy": 0.5623100303951367,
+  "precision_macro": 0.468013468013468,
+  "recall_macro": 0.5623100303951367,
+  "f1_per_class": {
+    "away_win_0": 0.759493670886076,
+    "draw_1": 0.0,
+    "home_win_2": 0.7722772277227723
+  },
+  "precision_per_class": {
+    "away_win_0": 0.6818181818181818,
+    "draw_1": 0.0,
+    "home_win_2": 0.7222222222222222
+  },
+  "recall_per_class": {
+    "away_win_0": 0.8571428571428571,
+    "draw_1": 0.0,
+    "home_win_2": 0.8297872340425532
+  },
+  "confusion_matrix": [
+    [
+      30,
+      2,
+      3
+    ],
+    [
+      10,
+      0,
+      12
+    ],
+    [
+      4,
+      4,
+      39
+    ]
+  ]
 }
