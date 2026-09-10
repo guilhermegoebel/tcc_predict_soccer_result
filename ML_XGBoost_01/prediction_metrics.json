@@ -3,25 +3,25 @@
   "year": 2026,
   "num_matches": 104,
   "has_real_result": true,
-  "accuracy": 0.6538461538461539,
-  "f1_macro": 0.5064978902953586,
-  "balanced_accuracy": 0.5552178318135764,
-  "precision_macro": 0.46626643796455114,
-  "recall_macro": 0.5552178318135764,
+  "accuracy": 0.6634615384615384,
+  "f1_macro": 0.5105902995362828,
+  "balanced_accuracy": 0.5623100303951367,
+  "precision_macro": 0.468013468013468,
+  "recall_macro": 0.5623100303951367,
   "f1_per_class": {
     "away_win_0": 0.759493670886076,
     "draw_1": 0.0,
-    "home_win_2": 0.76
+    "home_win_2": 0.7722772277227723
   },
   "precision_per_class": {
     "away_win_0": 0.6818181818181818,
     "draw_1": 0.0,
-    "home_win_2": 0.7169811320754716
+    "home_win_2": 0.7222222222222222
   },
   "recall_per_class": {
     "away_win_0": 0.8571428571428571,
     "draw_1": 0.0,
-    "home_win_2": 0.8085106382978723
+    "home_win_2": 0.8297872340425532
   },
   "confusion_matrix": [
     [
@@ -36,8 +36,8 @@
     ],
     [
       4,
-      5,
-      38
+      4,
+      39
     ]
   ]
 }
