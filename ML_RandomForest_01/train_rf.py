@@ -41,11 +41,23 @@ CHANGELOG (alterações para manter coerência com train_xgboost.py):
    esquema do train_xgboost.py (accuracy, f1_macro, log_loss bruto/
    calibrado, balanced_accuracy, precision_macro, recall_macro), para
    dar para comparar os dois modelos lado a lado.
+5. Hiperparâmetros: se existir um rf_best_hyperparams.json no mesmo
+   diretório (gerado por um tune_rf_hyperparams.py análogo ao
+   tune_xgboost_hyperparams.py, usando validação cruzada temporal
+   mais robusta, ex.: TimeSeriesSplit com múltiplos folds, sem tocar
+   no conjunto de teste), o script carrega esses hiperparâmetros
+   diretamente e PULA a busca interna do passo 4. Se o arquivo não
+   existir, o script cai de volta no comportamento anterior (busca
+   via RandomizedSearchCV + PredefinedSplit, uma única divisão
+   treino/validação) e emite um aviso deixando claro que essa busca
+   é uma aproximação mais simples do que a validação cruzada
+   temporal completa usada no XGBoost.
 -----------------------------------------------------------------
 """
 
 import json
 import pickle
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -105,6 +117,16 @@ NON_FEATURE_COLUMNS = [
     'home_team_seen',
     'away_team_seen',
 ]
+
+# Hiperparâmetros: por padrão, a busca é feita neste próprio script
+# (passo 4, via RandomizedSearchCV + PredefinedSplit — uma única
+# divisão treino/validação). Se existir um rf_best_hyperparams.json
+# no mesmo diretório — gerado por um tune_rf_hyperparams.py análogo
+# ao tune_xgboost_hyperparams.py, usando validação cruzada temporal
+# mais robusta (ex.: TimeSeriesSplit com múltiplos folds), sem tocar
+# no conjunto de teste — ele é carregado automaticamente e a busca
+# interna é pulada.
+RF_HYPERPARAMS_FILE = Path('rf_best_hyperparams.json')
 
 
 def export_summary_table(metrics_df: pd.DataFrame, output_path='rf_resumo_executivo.png') -> Path:
@@ -273,69 +295,86 @@ X_val_imp = imputer.transform(X_val)
 X_test_imp = imputer.transform(X_test)
 
 # =============================================================
-# 4. BUSCA DE HIPERPARÂMETROS (só para ESCOLHER os parâmetros;
-#    o refit final é feito manualmente no passo 6, só com X_train)
+# 4. HIPERPARÂMETROS: CARREGAR DE ARQUIVO OU BUSCAR NESTE SCRIPT
+#    (o refit final é feito manualmente no passo 5, só com X_train)
 # =============================================================
-print("\nIniciando testes com diferentes configurações de árvores...")
+if RF_HYPERPARAMS_FILE.exists():
+    with open(RF_HYPERPARAMS_FILE, 'r', encoding='utf-8') as f:
+        best_params = json.load(f)
+    print(f'\nHiperparâmetros carregados de {RF_HYPERPARAMS_FILE} '
+          f'(gerados por tune_rf_hyperparams.py):')
+    for k, v in best_params.items():
+        print(f'  {k}: {v}')
+else:
+    warnings.warn(
+        f'{RF_HYPERPARAMS_FILE} não encontrado — buscando hiperparâmetros '
+        f'neste próprio script via RandomizedSearchCV com uma única divisão '
+        f'treino/validação (PredefinedSplit). Rode tune_rf_hyperparams.py '
+        f'para gerar hiperparâmetros ajustados por validação cruzada '
+        f'temporal (TimeSeriesSplit, múltiplos folds), mais robusta do que '
+        f'a busca de um único split feita aqui.'
+    )
 
-X_search = np.vstack((X_train_imp, X_val_imp))
-y_search = pd.concat([y_train, y_val], axis=0).reset_index(drop=True)
+    print("\nIniciando testes com diferentes configurações de árvores...")
 
-test_fold = np.concatenate([
-    np.full(X_train_imp.shape[0], -1),
-    np.full(X_val_imp.shape[0], 0)
-])
+    X_search = np.vstack((X_train_imp, X_val_imp))
+    y_search = pd.concat([y_train, y_val], axis=0).reset_index(drop=True)
 
-ps = PredefinedSplit(test_fold)
+    test_fold = np.concatenate([
+        np.full(X_train_imp.shape[0], -1),
+        np.full(X_val_imp.shape[0], 0)
+    ])
 
-param_grid = {
-    'n_estimators': [100, 200, 300],
-    'max_depth': [5, 8, 10],
-    'min_samples_leaf': [5, 10]
-}
+    ps = PredefinedSplit(test_fold)
 
-rf_base = RandomForestClassifier(class_weight='balanced', random_state=42, n_jobs=-1)
+    param_grid = {
+        'n_estimators': [100, 200, 300],
+        'max_depth': [5, 8, 10],
+        'min_samples_leaf': [5, 10]
+    }
 
-scoring_metrics = {
-    'f1_macro': 'f1_macro',
-    'accuracy': 'accuracy',
-    'balanced_accuracy': 'balanced_accuracy',
-    'precision_macro': 'precision_macro',
-    'recall_macro': 'recall_macro'
-}
+    rf_base = RandomForestClassifier(class_weight='balanced', random_state=42, n_jobs=-1)
 
-random_search = RandomizedSearchCV(
-    estimator=rf_base,
-    param_distributions=param_grid,
-    n_iter=10,
-    scoring=scoring_metrics,
-    refit=False,  # NÃO reajustar automaticamente em treino+validação;
-                  # o modelo final é treinado manualmente no passo 6,
-                  # só com X_train, para manter a validação "limpa"
-                  # (necessária para a calibração isotônica).
-    cv=ps,
-    random_state=42,
-    n_jobs=-1
-)
+    scoring_metrics = {
+        'f1_macro': 'f1_macro',
+        'accuracy': 'accuracy',
+        'balanced_accuracy': 'balanced_accuracy',
+        'precision_macro': 'precision_macro',
+        'recall_macro': 'recall_macro'
+    }
 
-random_search.fit(X_search, y_search)
+    random_search = RandomizedSearchCV(
+        estimator=rf_base,
+        param_distributions=param_grid,
+        n_iter=10,
+        scoring=scoring_metrics,
+        refit=False,  # NÃO reajustar automaticamente em treino+validação;
+                      # o modelo final é treinado manualmente no passo 5,
+                      # só com X_train, para manter a validação "limpa"
+                      # (necessária para a calibração isotônica).
+        cv=ps,
+        random_state=42,
+        n_jobs=-1
+    )
 
-# --- IMPRIMINDO RESULTADOS ---
-print("\n=============================================")
-print("RESULTADOS INDIVIDUAIS DE CADA CONFIGURAÇÃO")
-print("=============================================")
-results = random_search.cv_results_
+    random_search.fit(X_search, y_search)
 
-for i in range(len(results['params'])):
-    print(f"Configuração {i+1}: {results['params'][i]}")
-    print(f" -> F1-Macro (Base de Validação {TRAIN_END_YEAR + 1}-{VAL_END_YEAR}): {results['mean_test_f1_macro'][i]:.4f}\n")
+    # --- IMPRIMINDO RESULTADOS ---
+    print("\n=============================================")
+    print("RESULTADOS INDIVIDUAIS DE CADA CONFIGURAÇÃO")
+    print("=============================================")
+    results = random_search.cv_results_
 
-best_index = int(np.argmax(results['mean_test_f1_macro']))
-best_params = results['params'][best_index]
+    for i in range(len(results['params'])):
+        print(f"Configuração {i+1}: {results['params'][i]}")
+        print(f" -> F1-Macro (Base de Validação {TRAIN_END_YEAR + 1}-{VAL_END_YEAR}): {results['mean_test_f1_macro'][i]:.4f}\n")
 
-print("=============================================")
-print(f"MELHORES PARÂMETROS ENCONTRADOS:\n{best_params}")
-print("=============================================")
+    best_index = int(np.argmax(results['mean_test_f1_macro']))
+    best_params = results['params'][best_index]
+
+    print("=============================================")
+    print(f"MELHORES PARÂMETROS ENCONTRADOS:\n{best_params}")
+    print("=============================================")
 
 # =============================================================
 # 5. REFIT MANUAL DO MELHOR MODELO — SÓ EM X_TRAIN

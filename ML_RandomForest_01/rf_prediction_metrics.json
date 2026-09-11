@@ -1,5 +1,43 @@
 {
+  "model": "Random Forest",
+  "year": 2026,
   "num_matches": 104,
   "has_real_result": true,
-  "accuracy": 0.6634615384615384
+  "accuracy": 0.6730769230769231,
+  "f1_macro": 0.5380130418105101,
+  "balanced_accuracy": 0.5774615455466519,
+  "precision_macro": 0.5189393939393939,
+  "recall_macro": 0.5774615455466519,
+  "f1_per_class": {
+    "away_win_0": 0.759493670886076,
+    "draw_1": 0.06666666666666667,
+    "home_win_2": 0.7878787878787878
+  },
+  "precision_per_class": {
+    "away_win_0": 0.6818181818181818,
+    "draw_1": 0.125,
+    "home_win_2": 0.75
+  },
+  "recall_per_class": {
+    "away_win_0": 0.8571428571428571,
+    "draw_1": 0.045454545454545456,
+    "home_win_2": 0.8297872340425532
+  },
+  "confusion_matrix": [
+    [
+      30,
+      3,
+      2
+    ],
+    [
+      10,
+      1,
+      11
+    ],
+    [
+      4,
+      4,
+      39
+    ]
+  ]
 }
