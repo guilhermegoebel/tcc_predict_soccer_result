@@ -26,6 +26,7 @@ CHANGELOG (melhorias sobre a versão anterior):
 import json
 import pickle
 from pathlib import Path
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -72,6 +73,40 @@ DROP_COLUMNS = [
 # vazamento (é informação pré-jogo), então mantemos.
 
 TARGET_COLUMN = 'match_result'
+
+# Hiperparâmetros: por padrão usamos os valores fixos abaixo (escolhidos
+# manualmente). Se existir um best_hyperparams.json no mesmo diretório —
+# gerado por tune_xgboost_hyperparams.py via RandomizedSearchCV com CV
+# temporal (TimeSeriesSplit), sem tocar no conjunto de teste — ele é
+# carregado automaticamente e sobrescreve os valores default abaixo.
+DEFAULT_HYPERPARAMS = {
+    'n_estimators': 500,
+    'learning_rate': 0.05,
+    'max_depth': 5,
+    'subsample': 0.8,
+    'colsample_bytree': 0.8,
+    'min_child_weight': 5,
+    'reg_lambda': 1.0,
+}
+
+HYPERPARAMS_FILE = Path('best_hyperparams.json')
+
+if HYPERPARAMS_FILE.exists():
+    with open(HYPERPARAMS_FILE, 'r', encoding='utf-8') as f:
+        tuned_hyperparams = json.load(f)
+    model_hyperparams = {**DEFAULT_HYPERPARAMS, **tuned_hyperparams}
+    print(f'Hiperparâmetros carregados de {HYPERPARAMS_FILE} '
+          f'(gerados por tune_xgboost_hyperparams.py):')
+    for k, v in model_hyperparams.items():
+        print(f'  {k}: {v}')
+else:
+    model_hyperparams = DEFAULT_HYPERPARAMS
+    warnings.warn(
+        f'{HYPERPARAMS_FILE} não encontrado — usando hiperparâmetros fixos '
+        f'default (não otimizados). Rode tune_xgboost_hyperparams.py para '
+        f'gerar hiperparâmetros ajustados por RandomizedSearchCV com CV '
+        f'temporal.'
+    )
 
 
 def export_summary_table(metrics_df: pd.DataFrame, output_path='resumo_executivo.png') -> Path:
@@ -374,15 +409,9 @@ model = XGBClassifier(
     num_class=3,
     eval_metric='mlogloss',
     tree_method='hist',
-    n_estimators=500,
-    learning_rate=0.05,
-    max_depth=5,
-    subsample=0.8,
-    colsample_bytree=0.8,
-    min_child_weight=5,
-    reg_lambda=1.0,
     random_state=42,
-    early_stopping_rounds=30
+    early_stopping_rounds=30,
+    **model_hyperparams,
 )
 
 model.fit(

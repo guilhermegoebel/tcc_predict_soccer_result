@@ -35,7 +35,7 @@ LAST_MATCHES_FORM = 5
 
 # Anos em que houve fase final de Copa do Mundo, usados para a
 # feature 'world_cup'.
-WORLD_CUP_YEARS = {2010, 2014, 2018, 2022, 2026}
+WORLD_CUP_YEARS = {2002, 2006, 2010, 2014, 2018, 2022, 2026}
 
 DEBUG = True
 
