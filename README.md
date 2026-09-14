@@ -26,12 +26,9 @@ A classificação usa variáveis pré-jogo, como:
 A estrutura atual do diretório é a seguinte:
 
 - `script.py` — gera o dataset principal `football_matches_ml.csv` a partir dos dados brutos.
-- `run_pipeline.py` — executa o fluxo principal do XGBoost em sequência.
 - `ML_XGBoost_01/` — módulo principal de treinamento, tuning e inferência do modelo XGBoost.
 - `ML_RandomForest_01/` — implementação do modelo Random Forest para comparação de desempenho.
 - `ML_LogisticRegression_01/` — implementação do modelo de regressão logística.
-- `charts/` — scripts para geração de gráficos e visualizações.
-- `outputs/` — diretório de saídas complementares do projeto.
 ---
 
 ## Dados brutos e preparação
