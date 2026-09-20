@@ -1,136 +1,258 @@
 # Projeto de Machine Learning para previsão de resultados de partidas
 
-Este repositório reúne o pipeline de preparação de dados, treinamento e avaliação de modelos de classificação para prever o resultado de partidas de futebol usando informações históricas, recentes e contextuais. O projeto compara diferentes algoritmos e consolida a pipeline principal de geração do dataset e uso em produção.
+## Visão geral
 
-## Objetivo geral
+Este repositório reúne as etapas de coleta, integração, preparação de dados, treinamento, avaliação, explicabilidade e inferência de modelos de classificação para prever resultados de partidas internacionais de futebol.
 
-O objetivo do projeto é prever, antes da partida, o resultado de uma partida em três classes:
+São comparados três algoritmos:
 
-- 0 = vitória visitante
-- 1 = empate
-- 2 = vitória mandante
+- Regressão Logística;
+- Random Forest;
+- XGBoost.
 
-A classificação usa variáveis pré-jogo, como:
+O problema é formulado como uma classificação em três classes:
 
-- ranking e pontos FIFA
-- valor de mercado dos jogadores
-- histórico recente de desempenho
-- histórico direto entre as seleções
-- contexto da competição
-- dados temporais como mês e ano
+- `0` = vitória visitante (`away_win`);
+- `1` = empate (`draw`);
+- `2` = vitória mandante (`home_win`).
 
 ---
 
 ## Estrutura do projeto
 
-A estrutura atual do diretório é a seguinte:
+- `web_scraping/` — scripts de coleta de partidas, rankings FIFA e valores de mercado;
+- `script.py` — integra as fontes e gera o dataset principal de modelagem;
+- `run_pipeline.py` — executa o fluxo integrado atualmente configurado para o XGBoost;
+- `ML_LogisticRegression_01/` — tuning, treinamento, explicabilidade e inferência da Regressão Logística;
+- `ML_RandomForest_01/` — tuning, treinamento e inferência do Random Forest;
+- `ML_XGBoost_01/` — tuning, treinamento, explicabilidade e inferência do XGBoost;
+- `charts/` — scripts auxiliares para geração de gráficos;
+- `requirements.txt` — versões das dependências utilizadas.
 
-- `script.py` — gera o dataset principal `football_matches_ml.csv` a partir dos dados brutos.
-- `ML_XGBoost_01/` — módulo de treinamento, tuning e inferência do modelo XGBoost.
-- `ML_RandomForest_01/` — implementação do modelo Random Forest para comparação de desempenho.
-- `ML_LogisticRegression_01/` — implementação do modelo de regressão logística.
+Cada diretório de modelo pode conter um README específico com os comandos e os artefatos daquela implementação.
+
 ---
 
-## Dados brutos e preparação
+## Coleta por web scraping
 
-Os dados brutos principais estão no diretório raiz e incluem:
+Os scripts de coleta estão em `web_scraping/`:
 
-- `matches.csv`
-- `rankings_fifa.csv`
-- `valor_mercado_jogadores.csv`
-- `paises_siglas_relacao.csv`
-- `Copa2026.csv`
+- `scrape_national_football_teams.py` — percorre páginas de partidas do National Football Teams por identificador, coleta placar, competição e escalações e ignora IDs já processados;
+- `generate_player_list.py` — extrai a lista de jogadores a partir das escalações coletadas;
+- `scrape_transfermarkt.py` — consulta jogadores no Transfermarkt, coleta o histórico de valores de mercado e retoma a execução pelos nomes já registrados;
+- `scrape_fifa_rankings.py` — utiliza Selenium para navegar pelas publicações históricas do ranking masculino da FIFA e retoma pelas combinações de ano e data já salvas.
 
-O script `script.py` consolida estas fontes e gera o dataset de modelagem:
+As fontes consultadas são:
 
-- `football_matches_ml.csv`
+- FIFA: <https://inside.fifa.com/fifa-world-ranking/men>;
+- National Football Teams: <https://www.national-football-teams.com/>;
+- Transfermarkt: <https://www.transfermarkt.com/>.
 
-Esse dataset já contém features derivadas para uso em aprendizado supervisionado.
+Os coletores utilizam intervalos entre requisições, tentativas limitadas após falhas e persistência progressiva dos resultados. Como as páginas permanecem em atualização, alterações no HTML, nos endereços ou nos mecanismos de navegação podem exigir adaptações futuras.
+
+A coleta não faz parte de `run_pipeline.py` e deve ser executada separadamente. Os arquivos produzidos pelos coletores passam por normalização antes de serem utilizados pelo script de integração.
+
+---
+
+## Dados de entrada e integração
+
+Os principais arquivos consumidos por `script.py` são:
+
+- `matches.csv` — partidas internacionais e escalações;
+- `rankings_fifa.csv` — publicações históricas do ranking masculino da FIFA;
+- `valor_mercado_jogadores.csv` — histórico de valores de mercado dos jogadores;
+- `paises_siglas_relacao.csv` — correspondência entre nomes de seleções e códigos;
+- `Copa2026.csv` — partidas utilizadas na construção da base específica de 2026.
+
+O processo de integração:
+
+1. normaliza nomes e datas;
+2. relaciona seleções aos códigos utilizados no ranking;
+3. utiliza o ranking disponível até a data de cada partida;
+4. utiliza somente valores de mercado registrados até a data da partida;
+5. calcula atributos recentes e confrontos diretos em ordem cronológica;
+6. gera os arquivos de modelagem.
+
+As principais saídas são:
+
+- `football_matches_ml.csv` — base histórica de treinamento, validação e teste;
+- `football_matches_2026.csv` — base preparada para a aplicação dos modelos em 2026.
 
 ---
 
 ## Dataset principal
 
-O arquivo principal é `football_matches_ml.csv`.
+O arquivo `football_matches_ml.csv` contém variáveis pré-jogo e a classe observada.
 
-### Principais colunas
+### Identificação e resultado
 
-- `match_id` — identificador da partida
-- `date` — data da partida
-- `competition` — competição
-- `home_team`, `away_team` — seleções mandante e visitante
-- `home_goals`, `away_goals` — gols da partida
-- `home_rank`, `away_rank` — ranking FIFA antes do jogo
-- `home_points`, `away_points` — pontos FIFA antes do jogo
-- `rank_diff` — diferença de ranking
-- `points_diff` — diferença de pontos
-- `home_market_value_avg`, `away_market_value_avg` — média do valor de mercado
-- `market_value_avg_diff` — diferença de valor de mercado
-- `home_found_count`, `away_found_count` — quantos jogadores tiveram valor encontrado
-- `home_recent_win_rate`, `away_recent_win_rate` — taxa de vitórias recentes
-- `home_recent_goals_scored`, `away_recent_goals_scored` — gols marcados recentes
-- `home_recent_goals_conceded`, `away_recent_goals_conceded` — gols sofridos recentes
-- `h2h_home_wins`, `h2h_away_wins`, `h2h_draws` — histórico direto
-- `h2h_goal_diff` — saldo de gols no histórico direto
-- `year`, `month` — contexto temporal
-- `world_cup` — indicador de ano de Copa do Mundo
-- `match_result` — alvo do modelo
+- `match_id`, `date`, `competition`;
+- `home_team`, `away_team`;
+- `home_goals`, `away_goals`;
+- `match_result`.
 
-### Mapeamento do target
+### Ranking FIFA
 
-- 0 = vitória visitante
-- 1 = empate
-- 2 = vitória mandante
+- `home_rank`, `away_rank`;
+- `home_points`, `away_points`;
+- `rank_diff`, `points_diff`.
+
+### Valores de mercado
+
+- `home_market_value_avg`, `away_market_value_avg`;
+- `market_value_avg_diff`;
+- `home_found_count`, `away_found_count`.
+
+### Desempenho recente
+
+- `home_recent_win_rate`, `away_recent_win_rate`;
+- `home_recent_goals_scored`, `away_recent_goals_scored`;
+- `home_recent_goals_conceded`, `away_recent_goals_conceded`.
+
+### Confrontos diretos
+
+- `h2h_home_wins`, `h2h_away_wins`, `h2h_draws`;
+- `h2h_goal_diff`.
+
+### Contexto temporal
+
+- `year`, `month`;
+- `world_cup`.
+
+Os modelos atuais utilizam as mesmas 24 features numéricas. Nomes das equipes, competição, frequência das seleções e flags de seleção conhecida não são usados como preditores.
 
 ---
 
 ## Convenções metodológicas
 
-O projeto foi construído com atenção a alguns pilares fundamentais para manter a validade do modelo:
+### Separação temporal
 
-### 1. Separação temporal
+As partidas são ordenadas cronologicamente. O protocolo comum utiliza:
 
-Os splits são feitos em ordem cronológica e não aleatória. Isso evita que o modelo aprenda com informações futuras para prever resultados do passado.
+- treino: partidas até 2021;
+- validação: partidas de 2022 e 2023;
+- teste: partidas a partir de 2024.
 
-### 2. Evitação de vazamento
+### Prevenção de vazamento temporal
 
-As variáveis derivadas, como o histórico recente e o confronto direto, são construídas apenas com base em dados anteriores à partida em análise.
+Rankings, valores de mercado, desempenho recente e confrontos diretos são associados ou calculados somente com informações disponíveis até a data da partida correspondente. Imputadores, escaladores e demais transformações são ajustados apenas com os dados permitidos em cada etapa.
 
-### 3. Tratamento de classes desbalanceadas
+### Classes desbalanceadas
 
-Os modelos aplicam estratégias de ponderação alternativa ou ajustes para mitigar o viés de classes majoritárias, especialmente a tendência de vitórias do mandante.
+O conjunto possui frequências diferentes para vitória visitante, empate e vitória mandante. Os modelos utilizam ponderação de classes ou de amostras durante o treinamento, e o F1-macro é adotado como métrica principal de seleção.
 
-### 4. Explicabilidade
+### Baseline
 
-Além do desempenho preditivo, o projeto também inclui análise de importância de variáveis e explicação por feature impact, com foco em SHAP e permutation importance no módulo XGBoost.
+As avaliações incluem um baseline que prevê vitória do mandante para todas as partidas. A comparação permite verificar se os modelos superam a regra baseada somente na classe mais frequente.
 
----
+### Probabilidades
 
-## Pipeline principal
+Os três pipelines utilizam o conjunto de validação para ajustar calibração isotônica por classe. As probabilidades brutas e calibradas são mantidas separadamente para avaliação.
 
-O fluxo recomendando para uso do projeto é:
+### Explicabilidade
 
-1. Preparar os dados brutos.
-2. Gerar o dataset principal com `script.py`.
-3. Treinar um modelo.
-4. Validar o desempenho em conjunto de validação e teste.
-5. Interpretar a importância das features.
-6. Aplicar o modelo em dados futuros, como 2026.
+O projeto utiliza abordagens adequadas a cada modelo, incluindo coeficientes padronizados, permutation importance e valores SHAP. Essas medidas descrevem o comportamento preditivo dos modelos e não devem ser interpretadas como efeitos causais.
 
 ---
 
 ## Modelos disponíveis
 
-- XGBoost
-- Random Forest
-- Regressão logística
+### Regressão Logística
+
+Diretório: `ML_LogisticRegression_01/`
+
+- imputação pela mediana;
+- padronização das variáveis;
+- regularização selecionada por busca de hiperparâmetros;
+- análise de coeficientes, permutation importance e SHAP;
+- prefixo `rl_` nos artefatos gerados.
+
+Ordem recomendada:
+
+```bash
+python ML_LogisticRegression_01/tune_logistic_regression_hyperparams.py
+python ML_LogisticRegression_01/train_logistic_regression.py
+python ML_LogisticRegression_01/rl_feature_importance_analysis.py
+python ML_LogisticRegression_01/predict_2026.py
+```
+
+### Random Forest
+
+Diretório: `ML_RandomForest_01/`
+
+- imputação pela mediana;
+- busca aleatória de hiperparâmetros com validação temporal;
+- ponderação de classes;
+- avaliação histórica e aplicação em 2026.
+
+Consulte os scripts e o README do diretório para a ordem de execução e os nomes dos artefatos.
+
+### XGBoost
+
+Diretório: `ML_XGBoost_01/`
+
+- busca de hiperparâmetros com validação temporal;
+- pesos de amostra balanceados;
+- treinamento com early stopping;
+- explicabilidade por permutation importance e SHAP;
+- avaliação histórica e aplicação em 2026.
+
+O fluxo integrado configurado em `run_pipeline.py` executa a geração do dataset, o treinamento do XGBoost e sua aplicação em 2026. O tuning e a análise de explicabilidade permanecem etapas separadas.
 
 ---
 
-## Observações finais
+## Instalação
 
-- O projeto foi organizado para permitir comparação de algoritmos em um mesmo problema.
-- A manutenção dos critérios de temporização, preprocessing e reprodutibilidade é essencial para garantir validez experimental.
-- Cada modelo deve ser interpretado dentro do seu contexto e comparado com a linha de base adequada.
+Recomenda-se utilizar um ambiente virtual. A partir da raiz do projeto:
 
-Este README serve como visão geral do projeto. Para detalhes específicos de um modelo, consulte os READMEs individuais em cada diretório correspondente.
+```bash
+python -m venv .venv
+```
+
+No PowerShell:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+Instale as dependências:
+
+```bash
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+---
+
+## Execução do pipeline de dados
+
+Para gerar novamente o dataset histórico a partir das fontes já preparadas:
+
+```bash
+python script.py
+```
+
+Para executar o fluxo integrado atualmente configurado para o XGBoost:
+
+```bash
+python run_pipeline.py
+```
+
+Os demais modelos devem ser executados pelos scripts de seus respectivos diretórios.
+
+---
+
+## Reprodutibilidade
+
+As versões das bibliotecas estão fixadas em `requirements.txt`, e os scripts de modelagem utilizam `random_state=42` nas operações estocásticas identificadas. As divisões temporais não embaralham as partidas.
+
+Para associar resultados a uma versão específica do projeto, registre o hash do commit utilizado juntamente com os arquivos de métricas. Arquivos de dados, imagens e modelos serializados podem estar excluídos do versionamento; portanto, devem ser regenerados pelos scripts ou preservados separadamente quando necessários.
+
+---
+
+## Observações
+
+- A coleta automatizada depende da disponibilidade e da estrutura das páginas externas.
+- Os arquivos de modelagem devem ser regenerados quando as fontes ou as regras de integração forem alteradas.
+- Alterações nas features, nos cortes temporais ou nos hiperparâmetros devem ser registradas para manter a rastreabilidade dos experimentos.
+- As previsões representam estimativas dos modelos e não garantem o resultado de uma partida.
