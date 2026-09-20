@@ -22,11 +22,9 @@ O problema é formulado como uma classificação em três classes:
 
 - `web_scraping/` — scripts de coleta de partidas, rankings FIFA e valores de mercado;
 - `script.py` — integra as fontes e gera o dataset principal de modelagem;
-- `run_pipeline.py` — executa o fluxo integrado atualmente configurado para o XGBoost;
-- `ML_LogisticRegression_01/` — tuning, treinamento, explicabilidade e inferência da Regressão Logística;
-- `ML_RandomForest_01/` — tuning, treinamento e inferência do Random Forest;
-- `ML_XGBoost_01/` — tuning, treinamento, explicabilidade e inferência do XGBoost;
-- `charts/` — scripts auxiliares para geração de gráficos;
+- `ML_LogisticRegression_01/` — Modelo Regressão Logística;
+- `ML_RandomForest_01/` — Modelo Random Forest;
+- `ML_XGBoost_01/` — Modelo XGBoost;
 - `requirements.txt` — versões das dependências utilizadas.
 
 Cada diretório de modelo pode conter um README específico com os comandos e os artefatos daquela implementação.
