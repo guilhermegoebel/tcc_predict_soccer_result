@@ -175,8 +175,6 @@ Diretório: `ML_RandomForest_01/`
 - ponderação de classes;
 - avaliação histórica e aplicação em 2026.
 
-Consulte os scripts e o README do diretório para a ordem de execução e os nomes dos artefatos.
-
 ### XGBoost
 
 Diretório: `ML_XGBoost_01/`
