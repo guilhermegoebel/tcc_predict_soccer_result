@@ -165,16 +165,6 @@ Diretório: `ML_LogisticRegression_01/`
 - padronização das variáveis;
 - regularização selecionada por busca de hiperparâmetros;
 - análise de coeficientes, permutation importance e SHAP;
-- prefixo `rl_` nos artefatos gerados.
-
-Ordem recomendada:
-
-```bash
-python ML_LogisticRegression_01/tune_logistic_regression_hyperparams.py
-python ML_LogisticRegression_01/train_logistic_regression.py
-python ML_LogisticRegression_01/rl_feature_importance_analysis.py
-python ML_LogisticRegression_01/predict_2026.py
-```
 
 ### Random Forest
 
