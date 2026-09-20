@@ -161,29 +161,13 @@ O projeto utiliza abordagens adequadas a cada modelo, incluindo coeficientes pad
 
 Diretório: `ML_LogisticRegression_01/`
 
-- imputação pela mediana;
-- padronização das variáveis;
-- regularização selecionada por busca de hiperparâmetros;
-- análise de coeficientes, permutation importance e SHAP;
-
 ### Random Forest
 
 Diretório: `ML_RandomForest_01/`
 
-- imputação pela mediana;
-- busca aleatória de hiperparâmetros com validação temporal;
-- ponderação de classes;
-- avaliação histórica e aplicação em 2026.
-
 ### XGBoost
 
 Diretório: `ML_XGBoost_01/`
-
-- busca de hiperparâmetros com validação temporal;
-- pesos de amostra balanceados;
-- treinamento com early stopping;
-- explicabilidade por permutation importance e SHAP;
-- avaliação histórica e aplicação em 2026.
 
 ---
 
