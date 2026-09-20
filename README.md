@@ -197,8 +197,6 @@ Diretório: `ML_XGBoost_01/`
 - explicabilidade por permutation importance e SHAP;
 - avaliação histórica e aplicação em 2026.
 
-O fluxo integrado configurado em `run_pipeline.py` executa a geração do dataset, o treinamento do XGBoost e sua aplicação em 2026. O tuning e a análise de explicabilidade permanecem etapas separadas.
-
 ---
 
 ## Instalação
