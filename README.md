@@ -202,14 +202,6 @@ Para gerar novamente o dataset histórico a partir das fontes já preparadas:
 python script.py
 ```
 
-Para executar o fluxo integrado atualmente configurado para o XGBoost:
-
-```bash
-python run_pipeline.py
-```
-
-Os demais modelos devem ser executados pelos scripts de seus respectivos diretórios.
-
 ---
 
 ## Reprodutibilidade
