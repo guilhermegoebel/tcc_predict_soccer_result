@@ -8,18 +8,6 @@ Requisitos:
 
 Uso:
     python train_xgboost.py
-
------------------------------------------------------------------
-CHANGELOG (melhorias sobre a versão anterior):
-1. Calibração de probabilidade (isotonic regression por classe,
-   ajustada na validação). Corrige o log-loss alto causado pelo
-   sample_weight='balanced', sem mudar as previsões de classe.
-2. Flag "time visto no treino" (home_team_seen / away_team_seen).
-   Antes, um time nunca visto no treino e um time raro de verdade
-   recebiam o mesmo valor de frequência (perto de 0) — o modelo
-   não conseguia distinguir os dois casos. Agora ele consegue.
-3. Comentário de rank_diff/points_diff corrigido para refletir o
-   que o código realmente faz (mantém essas colunas como feature).
 -----------------------------------------------------------------
 """
 
